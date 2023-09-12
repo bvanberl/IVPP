@@ -1,3 +1,14 @@
+*.pem
+venv/
+.idea/
+.git/
+wandb.yml
+__pycache__/
+wandb/
+results/
+artifacts/
+*.sh
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

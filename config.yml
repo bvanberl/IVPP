@@ -1,0 +1,72 @@
+PATHS:
+  IMAGES: "B:/Datasets/LUS_SSL/bmodes"
+  SPLITS: "B:/Datasets/LUS_SSL/splits/bmodes_splits"
+  MODEL_WEIGHTS: "results/models"
+
+DATA:
+  HEIGHT: 128
+  WIDTH: 128
+  MIN_PIXEL_VALUE: 0.0
+  MAX_PIXEL_VALUE: 255.0
+  NUM_CHANNELS: 3
+
+PRETRAIN:
+  SEED: 2
+  EPOCHS: 30
+  BATCH_SIZE: 256
+  OPTIMIZER: 'lars'
+  INIT_LR: 0.1
+  WARMUP_EPOCHS: 3
+  WEIGHT_DECAY: 0.000001
+  BACKBONE: 'mobilenetv3'
+  PROJ_NODES: [1024, 1024]
+  USE_BIAS: False
+  IMAGENET_WEIGHTS: True
+  USE_UNLABELLED: True
+  METHOD: "ncus_vicreg"
+  HPARAMS:
+    SIMCLR:
+      TEMPERATURE: 0.1
+    USCL:
+      TEMPERATURE: 0.5
+      ALPHA: 0.5
+      BETA: 0.5
+    BARLOW_TWINS:
+      LAMBDA_: 0.005
+    VICREG:
+      LAMBDA_: 25.0
+      MU: 25.0
+      NU: 1.0
+    NCUS_VICREG:
+      LAMBDA_: 50.0
+      MU: 25.0
+      NU: 1.0
+      MAX_TIME_DELTA: 0.1
+    NCUS_BARLOW_TWINS:
+      LAMBDA_: 0.005
+      MAX_TIME_DELTA: 1.0
+    NCUS_SIMCLR:
+      TEMPERATURE: 0.1
+      MAX_TIME_DELTA: 1.0
+
+SUPERVISED_EVAL:
+  EXPERIMENT: 'fine-tune'
+  SEED: 1
+  BACKBONE_TYPE: 'mobilenetv3'
+  LABEL: 'ab_lines_label'
+  PROP_TRAIN: 1.0
+  BACKBONE_WEIGHTS: 'imagenet'
+  IMBALANCE_STRATEGY: 'none'
+  BATCH_SIZE: 512
+  LAYERS_TO_FREEZE: 0
+  CUTOFF_LAYER: 'top_activation'
+  EPOCHS: 10
+  LOSS: 'bce'
+  LR_BACKBONE: 0.00001
+  LR_HEAD: 0.0001
+  LR_DECAY_RATE: 0.02  # Learning rate decay
+  LR_DECAY_EPOCH: 1 # Epoch to start lr decay
+  WEIGHT_DECAY: 0.01
+  OPTIMIZER: 'Adam'
+  PATIENCE: 20
+  MLP_HIDDEN_LAYERS: [32]
