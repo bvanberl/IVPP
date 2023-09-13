@@ -4,7 +4,7 @@ from typing import Optional, Callable
 import pandas as pd
 import numpy as np
 from torch.utils.data import Dataset
-from torchvision.io import read_image
+import cv2
 
 
 class NCUSDataset(Dataset):
@@ -12,6 +12,7 @@ class NCUSDataset(Dataset):
             self,
             video_records: pd.DataFrame,
             img_root_dir: str,
+            channels: int,
             max_time_delta: float,
             transforms1: Optional[Callable],
             transforms2: Optional[Callable],
@@ -23,16 +24,21 @@ class NCUSDataset(Dataset):
         self.img_counts = video_records["n_frames"]
         self.fps = video_records["fps"]
         self.img_root_dir = img_root_dir
+        if channels == 1:
+            self.img_read_flag = cv2.IMREAD_GRAYSCALE
+        else:
+            self.img_read_flag = cv2.IMREAD_COLOR
         self.max_time_delta = max_time_delta
         self.transforms1 = transforms1
         self.transforms2 = transforms2
         self.sample_weights = sample_weights
         self.img_ext = img_ext
+        self.cardinality = len(self.video_ids)
 
     def __len__(self):
-        return len(self.video_ids)
+        return self.cardinality
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int):
         video_dir = self.video_dirs[idx]
         video_id = self.video_ids[idx]
         n_frames = self.video_ids[idx]
@@ -49,14 +55,14 @@ class NCUSDataset(Dataset):
         # Load images
         x1_path = self._img_path_from_record(video_dir, video_id, img_idx1)
         x2_path = self._img_path_from_record(video_dir, video_id, img_idx2)
-        x1 = read_image(x1_path)
-        x2 = read_image(x2_path)
+        x1 = cv2.imread(x1_path, self.img_read_flag)
+        x2 = cv2.imread(x2_path, self.img_read_flag)
 
         # Apply data augmentation transforms
         if self.transforms1:
-            x1 = self.transforms1(x1)
+            x1 = self.transforms1(x1)["image"]
         if self.transforms2:
-            x2 = self.transforms2(x2)
+            x2 = self.transforms2(x2)["image"]
 
         # Determine sample weight according to distance between images
         if self.sample_weights:
