@@ -33,15 +33,11 @@ def get_supervised_bmode_augmentions(
         brightness_delta: float = 0.4,
         contrast_low: float = 0.6,
         contrast_high: float = 1.4,
-        mean_pixel_val: List[float] = None,
-        std_pixel_val: List[float] = None
     ) -> A.Compose:
     """Defines augmentation pipeline for supervised learning experiments.
     :param brightness_delta: Maximum brightness increase/decrease, in [0, 1]
     :param contrast_low: Lower bound for contrast transformation
     :param contrast_high: Upper bound for contrast transformation
-    :param mean_pixel_val: Channel-wise means
-    :param std_pixel_val: Channel-wise standard deviation
     :return: Callable augmentation pipeline
     """
     return A.Compose([
@@ -53,7 +49,6 @@ def get_supervised_bmode_augmentions(
             p=1.
         ),
         A.HorizontalFlip(p=0.5),
-        get_normalize_transform(mean_pixel_val, std_pixel_val),
         ToTensorV2()    # Rescale to [0, 1] & convert to channels-first
     ])
 
@@ -61,8 +56,6 @@ def get_byol_augmentations(
         height: int,
         width: int,
         t_prime: bool,
-        mean_pixel_val: List[float] = None,
-        std_pixel_val: List[float] = None
 ) -> A.Compose:
     """
     Applies random data transformations according to the data augmentations
@@ -71,8 +64,6 @@ def get_byol_augmentations(
     :param height: Image height
     :param width: Image width
     :param t_prime: True if image is to be sampled from distribution, T'
-    :param mean_pixel_val: Channel-wise means
-    :param std_pixel_val: Channel-wise standard deviation
     :return: Callable augmentation pipeline
     """
     if t_prime:
@@ -109,7 +100,6 @@ def get_byol_augmentations(
             ])
         ),
         final_transforms,
-        get_normalize_transform(mean_pixel_val, std_pixel_val),
         ToTensorV2()
     ])
 
@@ -126,9 +116,7 @@ def get_bmode_baseline_augmentations(
         blur_prob: float = 0.2,
         min_blur_sigma: float = 0.1,
         max_blur_sigma: float = 2.0,
-        max_gauss_filter_width: int = 5,
-        mean_pixel_val: List[float] = None,
-        std_pixel_val: List[float] = None
+        max_gauss_filter_width: int = 5
 ) -> A.Compose:
     """Applies random transformations to input B-mode image.
 
@@ -147,8 +135,6 @@ def get_bmode_baseline_augmentations(
     :param min_blur_sigma: Minimum blur kernel standard deviation
     :param max_blur_sigma: Maximum blur kernel standard deviation
     :param max_gauss_filter_width: Maximum blur filter width
-    :param mean_pixel_val: Channel-wise means
-    :param std_pixel_val: Channel-wise standard deviation
     :return: Callable augmentation pipeline
     """
     return A.Compose([
@@ -174,6 +160,5 @@ def get_bmode_baseline_augmentations(
             sigma_limit=(min_blur_sigma, max_blur_sigma),
             p=blur_prob
         ),
-        get_normalize_transform(mean_pixel_val, std_pixel_val),
         ToTensorV2(),
     ])
