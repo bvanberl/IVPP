@@ -27,65 +27,37 @@ def get_backbone(
 
     backbone_name = backbone_name.lower()
     if backbone_name == 'resnet18':
-        model = get_resnet18(imagenet_weights, n_cutoff_layers)
+        backbone = resnet18()
+        backbone = load_backbone_weights(
+            backbone,
+            imagenet_weights,
+            RESNET18_WEIGHTS,
+            n_cutoff_layers
+        )
     elif backbone_name == 'efficientnetv2b0':
-        model = get_efficientnetv2s(imagenet_weights, n_cutoff_layers)
+        backbone = efficientnet_v2_s()
+        backbone = load_backbone_weights(
+            backbone,
+            imagenet_weights,
+            EFFICIENTNETV2S_WEIGHTS,
+            n_cutoff_layers
+        )
     elif backbone_name == 'mobilenetv3':
-        model = get_mobilenetv3s(imagenet_weights, n_cutoff_layers)
+        backbone = mobilenet_v3_small()
+        backbone = load_backbone_weights(
+            backbone,
+            imagenet_weights,
+            MOBILENETV3S_WEIGHTS,
+            n_cutoff_layers
+        )
     elif backbone_name == 'vgg16':
-        model = get_vgg16(imagenet_weights, n_cutoff_layers)
+        backbone = vgg16()
+        backbone = load_backbone_weights(
+            backbone,
+            imagenet_weights,
+            VGG16_WEIGHTS,
+            n_cutoff_layers
+        )
     else:
         raise Exception(f"Unsupported backbone architecture: {backbone_name}")
-    return model
-
-def get_resnet18(
-    imagenet_weights: bool = False,
-    n_cutoff_layers: int = 0
-) -> Module:
-    backbone = resnet18()
-    if imagenet_weights:
-        state_dict = torch.hub.load_state_dict_from_url(RESNET18_WEIGHTS)
-        backbone.load_state_dict(state_dict)
-    backbone.fc = Identity()
-    if n_cutoff_layers > 0:
-        backbone = Sequential(*list(backbone.children())[:-(n_cutoff_layers + 1)])
-    return backbone
-
-def get_efficientnetv2s(
-    imagenet_weights: bool = False,
-    n_cutoff_layers: int = 0
-) -> Module:
-    backbone = efficientnet_v2_s()
-    if imagenet_weights:
-        state_dict = torch.hub.load_state_dict_from_url(EFFICIENTNETV2S_WEIGHTS)
-        backbone.load_state_dict(state_dict)
-    backbone.fc = Identity()
-    if n_cutoff_layers > 0:
-        backbone = Sequential(*list(backbone.children())[:-(n_cutoff_layers + 1)])
-    return backbone
-
-def get_mobilenetv3s(
-    imagenet_weights: bool = False,
-    n_cutoff_layers: int = 0
-) -> Module:
-    backbone = mobilenet_v3_small()
-    if imagenet_weights:
-        state_dict = torch.hub.load_state_dict_from_url(MOBILENETV3S_WEIGHTS)
-        backbone.load_state_dict(state_dict)
-    backbone.fc = Identity()
-    if n_cutoff_layers > 0:
-        backbone = Sequential(*list(backbone.children())[:-(n_cutoff_layers + 1)])
-    return backbone
-
-def get_vgg16(
-    imagenet_weights: bool = False,
-    n_cutoff_layers: int = 0
-) -> Module:
-    backbone = vgg16()
-    if imagenet_weights:
-        state_dict = torch.hub.load_state_dict_from_url(VGG16_WEIGHTS)
-        backbone.load_state_dict(state_dict)
-    backbone.fc = Identity()
-    if n_cutoff_layers > 0:
-        resnet = Sequential(*list(backbone.children())[:-(n_cutoff_layers + 1)])
     return backbone
