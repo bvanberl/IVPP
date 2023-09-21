@@ -36,8 +36,8 @@ def get_augmentation_transforms_pretrain(
         )
     elif pipeline == "bmode_baseline":
         return (
-            get_bmode_baseline_augmentations(height, width, **augment_kwargs),
-            get_bmode_baseline_augmentations(height, width, **augment_kwargs)
+            get_bmode_baseline_augmentations(height, width),
+            get_bmode_baseline_augmentations(height, width)
         )
     else:
         if pipeline != "none":
@@ -55,9 +55,8 @@ def prepare_bmode_pretrain_dataset(
         augment_pipeline: str = "bmode_baseline",
         shuffle: bool = False,
         channels: int = 1,
-        max_time_delta: float = 1.,
         n_workers: int = 10,
-        **augment_kwargs
+        **preprocess_kwargs
 ) -> DataLoader:
     '''
     Constructs a B-mode dataset for a joint embedding self-supervised pretraining task.
@@ -70,9 +69,9 @@ def prepare_bmode_pretrain_dataset(
     :param augment: If True, applies data augmentation transforms to the inputs.
     :param shuffle: Flag indicating whether to shuffle the dataset
     :param channels: Number of channels
-    :param min_pixel_val: Minimum pixel intensity
-    :param max_pixel_val: Maximum pixel intensity
-    :param augment_kwargs: Keyword arguments for the augmentation pipeline
+    :param max_time_delta: Maximum temporal separatino of two frames
+    :param n_workers: Number of workers for preloading batches
+    :param preprocess_kwargs: Keyword arguments for preprocessing
     :return: A batched dataset ready for iterating over preprocessed batches
     '''
 
@@ -82,17 +81,17 @@ def prepare_bmode_pretrain_dataset(
         augment_pipeline,
         height,
         width,
-        **augment_kwargs
+        **preprocess_kwargs
     )
     if pretrain_method in ["ncus_barlow_twins", "ncus_vicreg"]:
         dataset = NCUSDataset(
             bmode_df,
             img_root,
             channels,
-            max_time_delta,
+            preprocess_kwargs["max_time_delta"],
             transforms1=augment1,
             transforms2=augment2,
-            sample_weights=True
+            sample_weights=preprocess_kwargs["sample_weights"]
         )
     elif pretrain_method in ["simclr", "barlow_twins", "vicreg"]:
 
@@ -171,7 +170,7 @@ def load_data_for_pretrain(
         width: int = 128,
         height: int = 128,
         us_mode: str = "bmode",
-        **augment_kwargs
+        **preprocess_kwargs
 ) -> (DataLoader, pd.DataFrame):
     """
     Retrieve data, data splits, and returns an iterable preprocessed dataset for pretraining
@@ -189,7 +188,7 @@ def load_data_for_pretrain(
     :param max_pixel_val: Maximum value for pixel intensity
     :param width: Desired width of images
     :param height: Desired height of images
-    :param augment_kwargs: Keyword arguments for the preprocessor initializer
+    :param preprocess_kwargs: Keyword arguments for preprocessing
     :return: dataset for pretraining
     """
 
@@ -242,10 +241,10 @@ def load_data_for_pretrain(
             batch_size,
             width,
             height,
-            augment=augment_pipeline,
+            augment_pipeline=augment_pipeline,
             shuffle=True,
-            n_channels=channels,
-            **augment_kwargs
+            channels=channels,
+            **preprocess_kwargs
         )
         if val_frames_df.shape[0] > 0:
             val_set = prepare_bmode_pretrain_dataset(
@@ -258,7 +257,7 @@ def load_data_for_pretrain(
                 augment_pipeline="none",
                 shuffle=False,
                 channels=channels,
-                **augment_kwargs
+                **preprocess_kwargs
             )
         else:
             val_set = None
@@ -277,7 +276,7 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
                              channels: int = 1,
                              n_classes: int = 2,
                              n_workers: int = 10,
-                             **augment_kwargs
+                             **preprocess_kwargs
                              ):
     '''
     Constructs a dataset for a supervised learning task.
@@ -291,14 +290,14 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
     :param channels: Number of channels
     :param n_classes: Number of classes
     :param n_workers: Number of workers for loading images
-    :param augment_kwargs: Keyword arguments for the preprocessor initializer
+    :param preprocess_kwargs: Keyword arguments for the preprocessor initializer
     :return: A batched dataset loader
     '''
 
     image_paths = image_df["filepath"]
     labels = image_df[label_col]
     if augment_pipeline == "supervised":
-        transforms = get_supervised_bmode_augmentions(**augment_kwargs)
+        transforms = get_supervised_bmode_augmentions(**preprocess_kwargs)
     else:
         if augment_pipeline != "none":
             logging.warning(f"Unrecognized augmentation pipeline: {augment_pipeline}.\n"

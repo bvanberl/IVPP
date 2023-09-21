@@ -87,5 +87,5 @@ def get_vgg16(
         backbone.load_state_dict(state_dict)
     backbone.fc = Identity()
     if n_cutoff_layers > 0:
-        resnet = Sequential(*list(backbone.children())[:-(n_cutoff_layers + 1)])
+        backbone = Sequential(*list(backbone.children())[:-(n_cutoff_layers + 1)])
     return backbone

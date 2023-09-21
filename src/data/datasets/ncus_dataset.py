@@ -41,15 +41,15 @@ class NCUSDataset(Dataset):
     def __getitem__(self, idx: int):
         video_dir = self.video_dirs[idx]
         video_id = self.video_ids[idx]
-        n_frames = self.video_ids[idx]
+        n_frames = self.img_counts[idx]
         fps = self.fps[idx]
 
         # Sample two images that are separated by no more than a threshold
-        max_dur_frame_delta = int(np.ceil(self.max_time_delta * fps))
-        max_frame_delta = np.min(max_dur_frame_delta, n_frames)
+        max_dur_frame_delta = int(self.max_time_delta * fps)
+        max_frame_delta = np.minimum(max_dur_frame_delta, n_frames)
         img_idx1 = np.random.randint(0, n_frames, dtype=int)
         idx2_min = np.maximum(0, img_idx1 - max_frame_delta)
-        idx2_max = np.minimum(img_idx1 + max_frame_delta, n_frames)
+        idx2_max = np.minimum(img_idx1 + max_frame_delta, n_frames - 1)
         img_idx2 = np.random.randint(idx2_min, idx2_max + 1, dtype=int)
 
         # Load images
@@ -59,10 +59,13 @@ class NCUSDataset(Dataset):
         x2 = cv2.imread(x2_path, self.img_read_flag)
 
         # Apply data augmentation transforms
-        if self.transforms1:
-            x1 = self.transforms1(x1)["image"]
-        if self.transforms2:
-            x2 = self.transforms2(x2)["image"]
+        try:
+            if self.transforms1:
+                x1 = self.transforms1(image=x1)["image"]
+            if self.transforms2:
+                x2 = self.transforms2(image=x2)["image"]
+        except Exception as e:
+            print(e)
 
         # Determine sample weight according to distance between images
         if self.sample_weights:
@@ -76,7 +79,5 @@ class NCUSDataset(Dataset):
         return os.path.join(
             self.img_root_dir,
             video_dir,
-            video_id,
-            str(img_idx),
-            self.img_ext
+            f"{video_id}_{img_idx}{self.img_ext}"
         )

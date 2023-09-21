@@ -3,6 +3,7 @@ from abc import abstractmethod
 
 import torch
 from torch.nn import Module
+from torch import Tensor
 
 from src.models.backbones import get_backbone
 from src.models.projectors import get_projector
@@ -11,10 +12,11 @@ class JointEmbeddingModel(Module):
 
     def __init__(
             self,
-            input_shape: Tuple[int],
+            input_shape: Tuple[int, int, int, int],
             backbone_name: str,
             imagenet_weights: bool,
             projector_nodes: List[int],
+            loss: Module,
             backbone_cutoff_layers: int = 0,
             projector_bias: bool = False
         ):
@@ -34,14 +36,21 @@ class JointEmbeddingModel(Module):
             imagenet_weights,
             backbone_cutoff_layers
         )
+
         self.h_dim = self.backbone(torch.randn(*input_shape)).shape[-1]
         self.projector = get_projector(
             self.h_dim,
             projector_nodes,
             use_bias=projector_bias
         )
+        self.loss= loss
 
-    def forward(self, x0: torch.Tensor, x1: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def forward(
+            self, 
+            x0: Tensor, 
+            x1: Tensor,
+            sw: Optional[Tensor] = None
+    ) -> Tensor:
 
         # Compute features
         h0 = self.backbone(x0)
@@ -52,18 +61,6 @@ class JointEmbeddingModel(Module):
         z1 = self.projector(h1)
 
         # Calculate loss
-        loss_dict = self.loss(z0, z1)
+        loss = self.loss(z0, z1, sw)
 
-        return loss_dict
-
-    @abstractmethod
-    def loss(self, z0: torch.Tensor, z1: torch.Tensor) -> Dict[str, torch.Tensor]:
-        """Abstract loss function
-
-        :param z0: Batch of embeddings for first image in pairs
-        :param z1: Batch of embeddings for second image in pairs
-        :return: Dictionary containing total loss and potentially values of
-            constituent terms
-        """
-        pass
-
+        return loss

@@ -6,7 +6,7 @@ from torch import Tensor
 
 def all_gather(
         tensor: Tensor,
-        num_replicas: Optional[int]=None
+        num_replicas: Optional[int] = None
 ):
     """Gathers a tensor from replicas on other devices
 

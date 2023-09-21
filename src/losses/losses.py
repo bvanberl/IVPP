@@ -5,12 +5,16 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 import torch.distributed as dist
 
-from utils import all_gather, multiclass_accuracy, off_diagonal, \
+from src.losses.utils import all_gather, multiclass_accuracy, off_diagonal, \
     weighted_moments
 
 class SimCLRLoss(nn.Module):
 
-    def __init__(self, reduction: str = "mean", tau: float = 0.05):
+    def __init__(
+            self,
+            reduction: str = "mean",
+            tau: float = 0.05
+    ):
         """
         :param reduction: Type of reduction
         :param tau: SimCLR temperature
@@ -19,7 +23,7 @@ class SimCLRLoss(nn.Module):
         assert reduction in ["mean", "sum"], "Reduction must be 'mean' or 'sum'"
         self.reduction = reduction
         self.tau = tau
-        self.contrastive_accuracy = None
+        self.contrastive_accuracy = 0.
         self.LARGE_CONST = 1e9
 
     def forward(
@@ -80,7 +84,7 @@ class SimCLRLoss(nn.Module):
         loss_b = F.cross_entropy(input=logits2, target=labels, reduction="none")
 
         # Apply sample weights
-        if sw:
+        if sw is not None:
             loss_a = torch.mul(loss_a, sw)
             loss_b = torch.mul(loss_b, sw)
 
@@ -117,8 +121,8 @@ class BarlowTwinsLoss(nn.Module):
         super().__init__()
         self.batch_size = batch_size
         self.lambda_ = lambda_
-        self.inv_term = None    # Invariance term
-        self.rr_term = None     # Redundancy reduction term
+        self.inv_term = 0.    # Invariance term
+        self.rr_term = 0.     # Redundancy reduction term
         self.MARGIN = 1e-12
         self.COL_STD_EPSILON = 1e-5
 
@@ -162,7 +166,7 @@ class BarlowTwinsLoss(nn.Module):
         :return: A standardized x, with shape (batch_size, z_dim)
         """
 
-        if sw:
+        if sw is not None:
             col_mean, col_var = weighted_moments(x, 0, sw)
             col_std = torch.sqrt(col_var)
         else:
@@ -172,12 +176,11 @@ class BarlowTwinsLoss(nn.Module):
         return norm_col
 
 
-    def call(
+    def forward(
         self,
         z1: Tensor,
         z2: Tensor,
         sw: Optional[Tensor] = None,
-        **kwargs
     ) -> Tensor:
         """
         Computes the Barlow Twins loss
@@ -187,13 +190,16 @@ class BarlowTwinsLoss(nn.Module):
         :return: Barlow Twins loss, of shape (1)
         """
 
-        z1 = self.standardize_columns(z1, sw=sw)
-        z2 = self.standardize_columns(z2, sw=sw)
+        z1 = self._standardize_columns(z1, sw=sw)
+        z2 = self._standardize_columns(z2, sw=sw)
 
         # Construct the cross-correlation matrix
         ccm = z1.T @ z2
         ccm = ccm / self.batch_size
-        torch.distributed.all_reduce(ccm) # Sum across devices
+
+        num_replicas = dist.get_world_size()
+        if num_replicas > 1 and self.training:
+            torch.distributed.all_reduce(ccm) # Sum across devices
 
         # Calculate invariance term
         inv_term = self.invariance_term(ccm)
@@ -240,9 +246,9 @@ class VICRegLoss(nn.Module):
         self.nu = nu
         self.epsilon = epsilon
         self.gamma = gamma
-        self.inv_term = None    # Invariance term
-        self.var_term = None    # Variance term
-        self.cov_term = None    # Covariance term
+        self.inv_term = 0.    # Invariance term
+        self.var_term = 0.    # Variance term
+        self.cov_term = 0.    # Covariance term
 
     def _invariance_term(
             self,
@@ -258,7 +264,7 @@ class VICRegLoss(nn.Module):
         :param sw: Per-example weighting values, with shape (batch_size)
         :return: Similarity loss, with shape (1)
         """
-        if sw:
+        if sw is not None:
             sq_diffs = torch.unsqueeze(sw, dim=-1) * torch.square(z2 - z1)
             return torch.mean(sq_diffs)
         else:
@@ -281,12 +287,7 @@ class VICRegLoss(nn.Module):
         reg_std_z2 = torch.mean(F.relu(1 - std_z2))
         return 0.5 * (reg_std_z1 + reg_std_z2)
 
-    def _covariance_term(
-            self,
-            z1: Tensor,
-            z2: Tensor,
-            sw: Optional[Tensor] = None
-    ) -> Tensor:
+    def _covariance_term(self, z1: Tensor, z2: Tensor) -> Tensor:
         """Computes the covariance term in VICReg
 
         Calculates the sum of the squared off-diagonal entries of
@@ -299,12 +300,12 @@ class VICRegLoss(nn.Module):
         cov_z1 = (z1.T @ z1) / (self.batch_size - 1.)
         cov_z2 = (z2.T @ z2) / (self.batch_size - 1.)
 
-        off_diag_z1_sum = torch.sum(torch.square(off_diagonal(z1)))
-        off_diag_z2_sum = torch.sum(torch.square(off_diagonal(z2)))
+        off_diag_z1_sum = torch.sum(torch.square(off_diagonal(cov_z1)))
+        off_diag_z2_sum = torch.sum(torch.square(off_diagonal(cov_z2)))
         z_dim = z1.shape[-1]
         return (off_diag_z1_sum + off_diag_z2_sum) / z_dim
 
-    def call(
+    def forward(
         self,
         z1: Tensor,
         z2: Tensor,
@@ -322,8 +323,10 @@ class VICRegLoss(nn.Module):
         self.inv_term = self._invariance_term(z1, z2, sw=sw)
 
         # Assemble embeddings across all devices
-        z1 = all_gather(z1)
-        z2 = all_gather(z2)
+        num_replicas = dist.get_world_size()
+        if num_replicas > 1 and self.training:
+            z1 = all_gather(z1)
+            z2 = all_gather(z2)
 
         # Subtract column mean from each element
         z1 = z1 - z1.mean(dim=0)

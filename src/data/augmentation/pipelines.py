@@ -49,6 +49,7 @@ def get_supervised_bmode_augmentions(
             p=1.
         ),
         A.HorizontalFlip(p=0.5),
+        A.Normalize(mean=[0., 0., 0.], std=[1., 1., 1.,]),
         ToTensorV2()    # Rescale to [0, 1] & convert to channels-first
     ])
 
@@ -100,6 +101,7 @@ def get_byol_augmentations(
             ])
         ),
         final_transforms,
+        A.Normalize(mean=[0., 0., 0.], std=[1., 1., 1., ]),
         ToTensorV2()
     ])
 
@@ -109,7 +111,7 @@ def get_bmode_baseline_augmentations(
         crop_prob: float = 0.8,
         min_crop_area: float = 0.7,
         max_crop_area: float = 1.0,
-        brightness_prob: float = 0.7,
+        brightness_prob: float = 0.5,
         max_brightness: float = 0.25,
         contrast_prob: float = 0.7,
         max_contrast: float = 0.25,
@@ -160,5 +162,6 @@ def get_bmode_baseline_augmentations(
             sigma_limit=(min_blur_sigma, max_blur_sigma),
             p=blur_prob
         ),
+        A.Normalize(mean=[0., 0., 0.], std=[1., 1., 1., ]),
         ToTensorV2(),
     ])
