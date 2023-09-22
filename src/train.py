@@ -274,7 +274,6 @@ if __name__ == '__main__':
                     y_pred = torch.argmax(y_prob, 1, keepdim=True)
                 train_metrics = get_classification_metrics(
                     n_classes,
-                    "train",
                     y_prob.cpu().detach().numpy(),
                     y_pred.cpu().detach().numpy(),
                     y_true.cpu().detach().numpy()
@@ -287,6 +286,7 @@ if __name__ == '__main__':
         # Log validation set metrics
         val_metrics = evaluate_on_dataset(
             val_ds,
+            "val",
             classifier,
             n_classes,
             loss_fn,
@@ -310,7 +310,8 @@ if __name__ == '__main__':
     if args["test_eval"]:
         classifier.load_state_dict(torch.load(checkpoint_path))
         test_metrics = evaluate_on_dataset(
-            val_ds,
+            test_ds,
+            "test",
             classifier,
             n_classes,
             loss_fn,
