@@ -40,38 +40,31 @@ PRETRAIN:
       MU: 25.0
       NU: 1.0
     NCUS_VICREG:
-      LAMBDA_: 25.0
+      LAMBDA_: 50.0
       MU: 25.0
       NU: 1.0
       MAX_TIME_DELTA: 0.5
-      SAMPLE_WEIGHTS: False
+      SAMPLE_WEIGHTS: True
     NCUS_BARLOW_TWINS:
       LAMBDA_: 0.005
       MAX_TIME_DELTA: 0.5
-      SAMPLE_WEIGHTS: True
+      SAMPLE_WEIGHTS: False
     NCUS_SIMCLR:
       TEMPERATURE: 0.5
       MAX_TIME_DELTA: 1.0
       SAMPLE_WEIGHTS: True
 
-SUPERVISED_EVAL:
+TRAIN:
   EXPERIMENT: 'fine-tune'
   SEED: 1
   BACKBONE_TYPE: 'mobilenetv3'
   LABEL: 'ab_lines_label'
   PROP_TRAIN: 1.0
   BACKBONE_WEIGHTS: 'imagenet'
-  IMBALANCE_STRATEGY: 'none'
-  BATCH_SIZE: 512
-  LAYERS_TO_FREEZE: 0
-  CUTOFF_LAYER: 'top_activation'
+  BATCH_SIZE: 256
+  N_CUTOFF_LAYERS: 0
   EPOCHS: 10
-  LOSS: 'bce'
   LR_BACKBONE: 0.00001
   LR_HEAD: 0.0001
-  LR_DECAY_RATE: 0.02  # Learning rate decay
-  LR_DECAY_EPOCH: 1 # Epoch to start lr decay
   WEIGHT_DECAY: 0.01
-  OPTIMIZER: 'Adam'
-  PATIENCE: 20
   MLP_HIDDEN_LAYERS: [32]

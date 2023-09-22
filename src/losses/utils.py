@@ -65,6 +65,7 @@ def weighted_moments(
     """
 
     assert X.shape[dim] == weights.shape[0]
+    weights = torch.unsqueeze(weights, dim=1)
 
     # Calculate the weighted mean
     weight_sum = torch.sum(weights)

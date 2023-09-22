@@ -88,7 +88,7 @@ class ImageClassificationDataset(Dataset):
 
         # Apply data augmentation transforms
         if self.transforms:
-            x = self.transforms(x)["image"]
+            x = self.transforms(image=x)["image"]
 
-        y = self.labels[idx]
+        y = np.ones((1,)) * self.labels[idx]
         return x, y

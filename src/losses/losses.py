@@ -202,18 +202,17 @@ class BarlowTwinsLoss(nn.Module):
             torch.distributed.all_reduce(ccm) # Sum across devices
 
         # Calculate invariance term
-        inv_term = self.invariance_term(ccm)
+        inv_term = self._invariance_term(ccm)
 
         # Calculate redundancy reduction term
-        rr_term = self.redundancy_reduction_term(ccm)
+        rr_term = self._redundancy_reduction_term(ccm)
 
         # Calculate final loss as weighted sum of terms
-        loss = inv_term + self.lambda_ * rr_term + self.margin
+        loss = inv_term + self.lambda_ * rr_term + self.MARGIN
 
         # Track the components of the loss
         self.inv_term = inv_term
         self.rr_term = rr_term
-        self._metrics["redundancy_reduction_term"].update_state(rr_term)
 
         return loss
 

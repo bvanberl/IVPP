@@ -28,6 +28,18 @@ def get_normalize_transform(
         std=std_pixel_val
     )
 
+def get_validation_scaling() -> A.Compose:
+    """Defines augmentation pipeline for supervised learning experiments.
+    :param brightness_delta: Maximum brightness increase/decrease, in [0, 1]
+    :param contrast_low: Lower bound for contrast transformation
+    :param contrast_high: Upper bound for contrast transformation
+    :return: Callable augmentation pipeline
+    """
+    return A.Compose([
+        A.Normalize(mean=[0., 0., 0.], std=[1., 1., 1.,]),
+        ToTensorV2()    # Rescale to [0, 1] & convert to channels-first
+    ])
+
 
 def get_supervised_bmode_augmentions(
         brightness_delta: float = 0.4,

@@ -43,7 +43,10 @@ def get_augmentation_transforms_pretrain(
         if pipeline != "none":
             logging.warning(f"Unrecognized augmentation pipeline: {pipeline}.\n"
                             f"No augmentations will be applied.")
-        return (None, None)
+        return (
+            get_validation_scaling(),
+            get_validation_scaling(),
+        )
 
 def prepare_bmode_pretrain_dataset(
         img_root: str,
@@ -294,15 +297,15 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
     :return: A batched dataset loader
     '''
 
-    image_paths = image_df["filepath"]
-    labels = image_df[label_col]
+    image_paths = image_df["filepath"].tolist()
+    labels = image_df[label_col].tolist()
     if augment_pipeline == "supervised":
         transforms = get_supervised_bmode_augmentions(**preprocess_kwargs)
     else:
         if augment_pipeline != "none":
             logging.warning(f"Unrecognized augmentation pipeline: {augment_pipeline}.\n"
                             f"No augmentations will be applied.")
-        transforms = None
+        transforms = get_validation_scaling()
     if label_col == 'lung_sliding':
         # TODO: Add M-mode preprocessor
         raise NotImplementedError("M-mode data not supported yet.")
@@ -314,7 +317,6 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
             channels,
             n_classes,
             transforms=transforms
-
         )
     data_loader = DataLoader(
         dataset,
@@ -337,7 +339,6 @@ def load_data_supervised(cfg: dict,
                          redownload_data: bool = True,
                          percent_train: int = 100,
                          channels: int = 1,
-                         oversample_minority: bool = False,
                          seed: int = 0
     ) -> (DataLoader, DataLoader, DataLoader, pd.DataFrame, pd.DataFrame, pd.DataFrame):
     '''

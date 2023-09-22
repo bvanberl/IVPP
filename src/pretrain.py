@@ -1,6 +1,7 @@
 import os
 import argparse
 import datetime
+import json
 
 import tqdm
 import yaml
@@ -130,7 +131,7 @@ if __name__ == '__main__':
     ).cuda(gpu)
     # model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
     # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
-    torchsummary.summary(model, input_size=(channels, width, height))
+    #torchsummary.summary(model, input_size=(channels, width, height))
 
     epochs = cfg['PRETRAIN']['EPOCHS']
     base_lr = cfg['PRETRAIN']['INIT_LR']
@@ -163,6 +164,7 @@ if __name__ == '__main__':
     # Training loop
     scaler = torch.cuda.amp.GradScaler()
     log_interval = args["log_interval"]
+    pretrain_state = {}
 
     for epoch in range(epochs):
         print(f"Epoch {epoch + 1}/{epochs} " + "=" * 30 + "\n")
@@ -190,37 +192,45 @@ if __name__ == '__main__':
             scalars = {"loss": loss, "lr": scheduler.get_lr()[0], "epoch": epoch}
             scalars.update(model.loss.get_instance_vars())
             if global_step % log_interval == 0:
-                log_scalars(global_step, "train", scalars, writer, use_wandb)
+                log_scalars("train", scalars, global_step, writer, use_wandb)
                 print(f"Step {epoch_step + 1}/{batches_per_epoch}: " +
                       ", ".join([f"{m}: {scalars[m]:.4f}" for m in scalars]))
 
         # Log validation set metrics
-        val_scalars = {"loss": 0.}
-        val_scalars.update({m: 0. for m in model.loss.get_instance_vars()})
-        for val_step, (x1, x2, sw) in enumerate(val_ds, start=0):
-            x1 = x1.cuda(gpu, non_blocking=True)
-            x2 = x2.cuda(gpu, non_blocking=True)
-            sw = sw.cuda(gpu, non_blocking=True)
+        with torch.no_grad():
+            val_scalars = {"loss": 0.}
+            val_scalars.update({m: 0. for m in model.loss.get_instance_vars()})
+            for val_step, (x1, x2, sw) in enumerate(val_ds, start=0):
+                x1 = x1.cuda(gpu, non_blocking=True)
+                x2 = x2.cuda(gpu, non_blocking=True)
+                sw = sw.cuda(gpu, non_blocking=True)
 
-            optimizer.zero_grad()
-            with torch.cuda.amp.autocast():
-                loss = model.forward(x1, x2, sw=sw)
-            val_scalars["loss"] += loss
-            step_metrics = model.loss.get_instance_vars()
-            for m in step_metrics:
-                val_scalars[m] += step_metrics[m]
-        for m in val_scalars:
-            val_scalars[m] /= len(val_ds)
-        log_scalars(start_step + epoch_step, "val", val_scalars, writer, use_wandb)
+                optimizer.zero_grad()
+                with torch.cuda.amp.autocast():
+                    loss = model.forward(x1, x2, sw=sw)
 
+                # Accumulate validation loss components
+                val_scalars["loss"] += loss
+                step_metrics = model.loss.get_instance_vars()
+                for m in step_metrics:
+                    val_scalars[m] += step_metrics[m]
+
+            # Log validation loss components
+            for m in val_scalars:
+                val_scalars[m] /= len(val_ds)
+            log_scalars("val", val_scalars, start_step + epoch_step, writer, use_wandb)
+            print(f"Epoch {epoch + 1}: " +
+                  ", ".join([f"val/{m}: {val_scalars[m]:.4f}" for m in val_scalars]))
 
         # Save checkpoint
-        state = dict(
+        pretrain_state = dict(
             epoch=epoch + 1,
             model=model.state_dict(),
+            backbone=model.backbone.state_dict(),
             optimizer=optimizer.state_dict(),
+            pretrain_method=method
         )
-        torch.save(state, os.path.join(checkpoint_dir, "checkpoint.pth"))
+        torch.save(pretrain_state, os.path.join(checkpoint_dir, "checkpoint.pth"))
 
     # Save the final pretrained model
     if use_wandb:
@@ -228,7 +238,7 @@ if __name__ == '__main__':
     else:
         cur_datetime = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         model_path = os.path.join(checkpoint_dir, "final_model.pth")
-    torch.save(model.state_dict(), model_path)
+    torch.save(pretrain_state, model_path)
 
     if use_wandb:
         wandb.finish()
