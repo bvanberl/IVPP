@@ -170,15 +170,15 @@ def get_classification_metrics(
     metrics["auc"] = roc_auc_score(y_true, y_prob)
     metrics["accuracy"] = accuracy_score(y_true, y_pred)
     if n_classes == 2:
-        metrics["precision"] = precision_score(y_true, y_pred)
-        metrics["recall"] = recall_score(y_true, y_pred)
-        metrics["f1"] = f1_score(y_true, y_pred)
+        metrics["precision"] = precision_score(y_true, y_pred, zero_division=0.)
+        metrics["recall"] = recall_score(y_true, y_pred, zero_division=0.)
+        metrics["f1"] = f1_score(y_true, y_pred, zero_division=0.)
     else:
         for i in range(n_classes):
             y_true_class = (y_true == i).astype(np.int64)
             y_pred_class = (y_pred == i).astype(np.int64)
-            metrics["class{i}_precision"] = precision_score(y_true_class, y_pred_class)
-            metrics["class{i}_recall"] = recall_score(y_true_class, y_pred_class)
-            metrics["class{i}_f1"] = f1_score(y_true_class, y_pred_class)
+            metrics["class{i}_precision"] = precision_score(y_true_class, y_pred_class, zero_division=0.)
+            metrics["class{i}_recall"] = recall_score(y_true_class, y_pred_class, zero_division=0.)
+            metrics["class{i}_f1"] = f1_score(y_true_class, y_pred_class, zero_division=0.)
     return metrics
 

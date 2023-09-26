@@ -1,16 +1,10 @@
-import os
 import argparse
 import datetime
 
 import json
-import tqdm
 import yaml
-import wandb
-import numpy as np
-import torch
-from torch.utils.tensorboard import SummaryWriter
 from torch.optim import SGD
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 import torchsummary
 
@@ -225,6 +219,8 @@ if __name__ == '__main__':
     h_dim = backbone(torch.randn((1,) + img_dim)).shape[-1]
     head = get_classifier_head(h_dim, fc_nodes, n_classes)
     classifier = Sequential(backbone, head).cuda(gpu)
+    print(backbone)
+    print(head)
 
     # Define an optimizer that assigns different learning rates to the
     # backbone and head.
@@ -233,11 +229,13 @@ if __name__ == '__main__':
     lr_backbone = run_cfg['lr_backbone']
     lr_head = run_cfg['lr_head']
     weight_decay = run_cfg['weight_decay']
+    momentum = run_cfg['momentum']
     param_groups = [dict(params=head.parameters(), lr=lr_head)]
     if experiment_type == "fine-tune":
         param_groups.append(dict(params=backbone.parameters(), lr=lr_backbone))
-    optimizer = SGD(param_groups, 0, momentum=0.9, weight_decay=weight_decay)
-    scheduler = CosineAnnealingLR(optimizer, epochs)
+    optimizer = SGD(param_groups, 0, weight_decay=weight_decay)
+    scheduler = ReduceLROnPlateau(optimizer, 'min')
+
     loss_fn = BCEWithLogitsLoss() if n_classes == 2 else CrossEntropyLoss()
     scaler = torch.cuda.amp.GradScaler()
     log_interval = args["log_interval"]
@@ -263,11 +261,10 @@ if __name__ == '__main__':
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
-            scheduler.step()   # Update LR
 
             # Log the loss and pertinent metrics.
             if global_step % log_interval == 0:
-                scalars = {"loss": loss, "lr": scheduler.get_last_lr()[-1], "epoch": epoch}
+                scalars = {"loss": loss, "lr_head": optimizer.param_groups[0]['lr'], "epoch": epoch}
                 if n_classes == 2:
                     y_pred = torch.greater_equal(y_prob, 0.5).to(torch.int64)
                 else:
@@ -298,16 +295,18 @@ if __name__ == '__main__':
         print(f"Epoch {epoch + 1}: " +
               ", ".join([f"val/{m}: {val_metrics[m]:.4f}" for m in val_metrics]))
 
-        # Save checkpoint if validation loss has improved
         val_loss = val_metrics["loss"]
+        scheduler.step(val_loss)  # Update LR if necessary
+
+        # Save checkpoint if validation loss has improved
         if val_loss < best_val_loss:
             print(f"Val loss improved from {best_val_loss} to {val_loss}. "
                   f"Updating checkpoint.")
-            best_val_loss  = val_loss
+            best_val_loss = val_loss
             torch.save(classifier.state_dict(), checkpoint_path)
 
     # Evaluate checkpoint with lowest validation loss on the test set
-    if args["test_eval"]:
+    if args["test_eval"] in ['Yes', 'yes', 'y', 'Y']:
         classifier.load_state_dict(torch.load(checkpoint_path))
         test_metrics = evaluate_on_dataset(
             test_ds,
@@ -321,7 +320,10 @@ if __name__ == '__main__':
             use_wandb
         )
         print(f"Test metrics:")
-        print(json.dumps(test_metrics, indent=4))
+        print(json.dumps(
+            {m: test_metrics[m].numpy() for m in test_metrics},
+            indent=4)
+        )
 
     if use_wandb:
         wandb.finish()

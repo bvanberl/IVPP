@@ -57,14 +57,17 @@ def weighted_moments(
     """Compute weighted moments along axis
 
     Determines the weighted mean and variance along the
-    desired axis
+    desired axis. Implemented according to definition at
+    https://www.itl.nist.gov/div898/software/dataplot/refman2/ch2/weighvar.pdf
     :param X: Matrix, with shape (h, w)
     :param dim: Samples axis
     :param weights: Weights per sample, with shape (`X.shape[dim]`)
     :return: weighted mean, weighted variance
     """
 
-    assert X.shape[dim] == weights.shape[0]
+    N = X.shape[dim]    # Number of data points
+    assert N == weights.shape[0]
+    N_prime = torch.count_nonzero(weights)  # Number of nonzero weights
     weights = torch.unsqueeze(weights, dim=1)
 
     # Calculate the weighted mean
@@ -75,6 +78,8 @@ def weighted_moments(
     squared_diff = torch.square(X - weighted_mean)
 
     # Calculate the weighted variance
-    weighted_var = torch.sum(squared_diff * weights) / weight_sum
+    numerator = torch.sum(squared_diff * weights, dim=dim)
+    denominator = (N_prime - 1.) * weight_sum / N_prime
+    weighted_var = numerator / denominator
 
     return weighted_mean, weighted_var

@@ -1,15 +1,7 @@
-import os
 import argparse
 import datetime
-import json
 
-import tqdm
 import yaml
-import wandb
-import numpy as np
-import torch
-from torch.utils.tensorboard import SummaryWriter
-import torchsummary
 
 from src.models.joint_embedding import JointEmbeddingModel
 from src.losses.losses import *
@@ -60,7 +52,7 @@ if __name__ == '__main__':
     use_unlabelled = cfg['PRETRAIN']['USE_UNLABELLED']
     use_imagenet = cfg['PRETRAIN']['IMAGENET_WEIGHTS']
     augment_pipeline = cfg['PRETRAIN']['AUGMENT_PIPELINE']
-    channels = 3 if use_imagenet else 1
+    channels = 3 # if use_imagenet else 1
     us_mode = "bmode"   # TODO: Add M-mode
 
     train_ds, train_df, val_ds, val_set = load_data_for_pretrain(
@@ -106,8 +98,10 @@ if __name__ == '__main__':
             id=resume_id
         )
         print(f"Run config: {wandb_run}")
+        model_artifact = wandb.Artifact(f"pretrained:{method}", type="model")
     else:
         wandb_run = None
+        model_artifact = None
 
 
     # Define the base loss and initialize any regularizers
@@ -132,6 +126,8 @@ if __name__ == '__main__':
     # model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
     # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     #torchsummary.summary(model, input_size=(channels, width, height))
+    print(model.backbone)
+    print(model.projector)
 
     epochs = cfg['PRETRAIN']['EPOCHS']
     base_lr = cfg['PRETRAIN']['INIT_LR']
@@ -165,6 +161,7 @@ if __name__ == '__main__':
     scaler = torch.cuda.amp.GradScaler()
     log_interval = args["log_interval"]
     pretrain_state = {}
+
 
     for epoch in range(epochs):
         print(f"Epoch {epoch + 1}/{epochs} " + "=" * 30 + "\n")
@@ -230,15 +227,16 @@ if __name__ == '__main__':
             optimizer=optimizer.state_dict(),
             pretrain_method=method
         )
-        torch.save(pretrain_state, os.path.join(checkpoint_dir, "checkpoint.pth"))
+        checkpoint_path = os.path.join(checkpoint_dir, "checkpoint.pth")
+        torch.save(pretrain_state, checkpoint_path)
+        if use_wandb:
+            model_artifact.add_file(checkpoint_path)
 
     # Save the final pretrained model
-    if use_wandb:
-        model_path = os.path.join(wandb.run.dir, f'{method}_pretrained')
-    else:
-        cur_datetime = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        model_path = os.path.join(checkpoint_dir, "final_model.pth")
+    model_path = os.path.join(checkpoint_dir, "final_model.pth")
     torch.save(pretrain_state, model_path)
+    if use_wandb:
+        model_artifact.add_file(model_path)
 
     if use_wandb:
         wandb.finish()

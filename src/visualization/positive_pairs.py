@@ -35,7 +35,7 @@ def visualize_views(
     :param sample_weight: Display sample weight for each positive pair
     '''
 
-    n_channels = views[0].shape[-1]
+    n_channels = views[0].shape[1]
     colour_map = 'gray' if n_channels == 1 else 'viridis'
     num_views = len(views) - 1
     num_imgs = num_imgs if num_imgs else len(views[0])
@@ -44,6 +44,10 @@ def visualize_views(
     num_row = num_row + 1 if num_imgs % num_col else num_row
     mean_pixel_value = np.array(mean_pixel_value).reshape((1, 1, n_channels))
     std_pixel_value = np.array(std_pixel_value).reshape((1, 1, n_channels))
+
+    views[0] = np.moveaxis(views[0].numpy(), 1, -1)  # Channels-first to channels-last
+    views[1] = np.moveaxis(views[1].numpy(), 1, -1)
+    views[2] = views[2].numpy()
 
     # Plot the images
     fig, axes = plt.subplots(num_row, num_col, figsize=fig_size)
@@ -57,16 +61,12 @@ def visualize_views(
 
         scale = max_pixel_value * std_pixel_value
         offset = max_pixel_value * mean_pixel_value
-        views[0] = np.moveaxis(views[0].numpy(), 1, -1) # Channels-first to channels-last
-        views[1] = np.moveaxis(views[1].numpy(), 1, -1)
-        views[2] = views[2].numpy()
         pair = [((views[j][i] * scale) + offset).astype(np.uint8)
                 for j in range(num_views)]
-        divider = np.ones(
-            (views[0][i].shape[0], 3,
-             views[0][i].shape[-1])
-        ) * max_pixel_value
-        ax.imshow(np.concat([pair[0], divider, pair[1]], axis=1), cmap=colour_map)
+        divider = (np.ones(
+            (views[0][i].shape[0], 3, views[0][i].shape[-1])
+        ) * max_pixel_value).astype(np.uint8)
+        ax.imshow(np.concatenate([pair[0], divider, pair[1]], axis=1), cmap=colour_map)
         if len(views) > 2 and sample_weight:
             ax.set_title(f"sw: {views[2][:num_views]}")
         ax.set_axis_off()
@@ -88,7 +88,7 @@ def visualize_joint_views_dataset(
         num_imgs: int = 16,
         views_per_col: int = 8,
         fig_size: Tuple[int, int] = (24, 4),
-        max_pixel_value: float = 1.0,
+        max_pixel_value: float = 255.0,
         mean_pixel_value: Tuple[float, float, float] = (0., 0., 0.),
         std_pixel_value: Tuple[float, float, float] = (1., 1., 1.)
 ):

@@ -1,6 +1,6 @@
 PATHS:
-  IMAGES: "B:/Datasets/LUS_SSL/bmodes"
-  SPLITS: "B:/Datasets/LUS_SSL/splits/bmodes_splits"
+  IMAGES: "bmodes"
+  SPLITS: "splits/bmodes_splits"
   MODEL_WEIGHTS: "results/models"
 
 DATA:
@@ -13,17 +13,17 @@ DATA:
 PRETRAIN:
   SEED: 2
   EPOCHS: 30
-  BATCH_SIZE: 384
+  BATCH_SIZE: 128
   OPTIMIZER: 'lars'
   INIT_LR: 0.2
   WARMUP_EPOCHS: 3
   WEIGHT_DECAY: 0.000001
-  BACKBONE: 'mobilenetv3'
+  BACKBONE: 'vgg16'
   PROJ_NODES: [1024, 1024]
   USE_BIAS: False
   IMAGENET_WEIGHTS: True
   USE_UNLABELLED: True
-  METHOD: "ncus_vicreg"
+  METHOD: "ncus_barlow_twins"
   AUGMENT_PIPELINE: "bmode_baseline"
   N_CUTOFF_LAYERS: 0
   HPARAMS:
@@ -48,7 +48,7 @@ PRETRAIN:
     NCUS_BARLOW_TWINS:
       LAMBDA_: 0.005
       MAX_TIME_DELTA: 0.5
-      SAMPLE_WEIGHTS: False
+      SAMPLE_WEIGHTS: True
     NCUS_SIMCLR:
       TEMPERATURE: 0.5
       MAX_TIME_DELTA: 1.0
@@ -57,14 +57,15 @@ PRETRAIN:
 TRAIN:
   EXPERIMENT: 'fine-tune'
   SEED: 1
-  BACKBONE_TYPE: 'mobilenetv3'
+  BACKBONE_TYPE: 'vgg16'
   LABEL: 'ab_lines_label'
   PROP_TRAIN: 1.0
   BACKBONE_WEIGHTS: 'imagenet'
   BATCH_SIZE: 256
   N_CUTOFF_LAYERS: 0
   EPOCHS: 10
-  LR_BACKBONE: 0.00001
-  LR_HEAD: 0.0001
+  LR_BACKBONE: 0.0001
+  LR_HEAD: 0.001
+  MOMENTUM: 0.9
   WEIGHT_DECAY: 0.01
   MLP_HIDDEN_LAYERS: [32]

@@ -1,5 +1,5 @@
 import torch
-from torch.nn import Module, Sequential, Identity
+from torch.nn import Module, Sequential, Identity, AdaptiveAvgPool2d
 from torchvision.models import resnet18, efficientnet_v2_s, \
     mobilenet_v3_small, vgg16
 
@@ -85,7 +85,8 @@ def get_vgg16(
     if imagenet_weights:
         state_dict = torch.hub.load_state_dict_from_url(VGG16_WEIGHTS)
         backbone.load_state_dict(state_dict)
-    backbone.fc = Identity()
+    backbone.avgpool = AdaptiveAvgPool2d(output_size=(1,1))
+    backbone.classifier = Identity()
     if n_cutoff_layers > 0:
         backbone = Sequential(*list(backbone.children())[:-(n_cutoff_layers + 1)])
     return backbone
