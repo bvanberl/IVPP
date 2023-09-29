@@ -19,10 +19,10 @@ class NCUSDataset(Dataset):
             sample_weights: bool = True,
             img_ext: str = ".jpg"
     ):
-        self.video_dirs = video_records["clip_dir"]
-        self.video_ids = video_records["id"]
-        self.img_counts = video_records["n_frames"]
-        self.fps = video_records["fps"]
+        self.video_dirs = video_records["clip_dir"].tolist()
+        self.video_ids = video_records["id"].tolist()
+        self.img_counts = video_records["n_frames"].tolist()
+        self.fps = video_records["fps"].tolist()
         self.img_root_dir = img_root_dir
         if channels == 1:
             self.img_read_flag = cv2.IMREAD_GRAYSCALE

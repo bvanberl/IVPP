@@ -13,16 +13,19 @@ class SimCLRLoss(nn.Module):
     def __init__(
             self,
             reduction: str = "mean",
-            tau: float = 0.05
+            tau: float = 0.05,
+            distributed: bool = False
     ):
         """
         :param reduction: Type of reduction
         :param tau: SimCLR temperature
+        :param distributed: True if training using multiple nodes
         """
         super().__init__()
         assert reduction in ["mean", "sum"], "Reduction must be 'mean' or 'sum'"
         self.reduction = reduction
         self.tau = tau
+        self.distributed = distributed
         self.contrastive_accuracy = 0.
         self.LARGE_CONST = 1e9
 
@@ -46,7 +49,7 @@ class SimCLRLoss(nn.Module):
         batch_size = z1.shape[0]
         emb_dim = z1.shape[1]
 
-        num_replicas = dist.get_world_size()
+        num_replicas = dist.get_world_size() if self.distributed else 1
         if num_replicas > 1 and self.training:
             z1_all = all_gather(z1, num_replicas=num_replicas)
             z2_all = all_gather(z2, num_replicas=num_replicas)
@@ -113,16 +116,18 @@ class SimCLRLoss(nn.Module):
 
 class BarlowTwinsLoss(nn.Module):
 
-    def __init__(self, batch_size: int, lambda_: float = 0.005):
+    def __init__(self, batch_size: int, lambda_: float = 0.005, distributed: bool = False):
         """
         :param batch_size: Batch size across all replicas
         :param lambda_: Weight for redundancy reduction term
+        :param distributed: True if training using multiple nodes
         """
         super().__init__()
         self.batch_size = batch_size
         self.lambda_ = lambda_
         self.inv_term = 0.    # Invariance term
         self.rr_term = 0.     # Redundancy reduction term
+        self.distributed = distributed
         self.MARGIN = 1e-12
         self.COL_STD_EPSILON = 1e-5
 
@@ -197,7 +202,7 @@ class BarlowTwinsLoss(nn.Module):
         ccm = z1.T @ z2
         ccm = ccm / self.batch_size
 
-        num_replicas = dist.get_world_size()
+        num_replicas = dist.get_world_size() if self.distributed else 1
         if num_replicas > 1 and self.training:
             torch.distributed.all_reduce(ccm) # Sum across devices
 
@@ -232,11 +237,13 @@ class VICRegLoss(nn.Module):
             mu: float = 25.,
             nu: float = 1.,
             epsilon: float = 1e-4,
-            gamma: float = 1.
+            gamma: float = 1.,
+            distributed: bool = False
     ):
         """
         :param batch_size: Batch size across all replicas
         :param lambda_: Weight for redundancy reduction term
+        :param distributed: True if training using multiple nodes
         """
         super().__init__()
         self.batch_size = batch_size
@@ -245,6 +252,7 @@ class VICRegLoss(nn.Module):
         self.nu = nu
         self.epsilon = epsilon
         self.gamma = gamma
+        self.distributed = distributed
         self.inv_term = 0.    # Invariance term
         self.var_term = 0.    # Variance term
         self.cov_term = 0.    # Covariance term
@@ -322,7 +330,7 @@ class VICRegLoss(nn.Module):
         self.inv_term = self._invariance_term(z1, z2, sw=sw)
 
         # Assemble embeddings across all devices
-        num_replicas = dist.get_world_size()
+        num_replicas = dist.get_world_size() if self.distributed else 1
         if num_replicas > 1 and self.training:
             z1 = all_gather(z1)
             z2 = all_gather(z2)

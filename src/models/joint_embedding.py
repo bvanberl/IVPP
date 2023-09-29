@@ -16,7 +16,6 @@ class JointEmbeddingModel(Module):
             backbone_name: str,
             imagenet_weights: bool,
             projector_nodes: List[int],
-            loss: Module,
             backbone_cutoff_layers: int = 0,
             projector_bias: bool = False
         ):
@@ -43,13 +42,11 @@ class JointEmbeddingModel(Module):
             projector_nodes,
             use_bias=projector_bias
         )
-        self.loss= loss
 
     def forward(
             self, 
             x0: Tensor, 
-            x1: Tensor,
-            sw: Optional[Tensor] = None
+            x1: Tensor
     ) -> Tensor:
 
         # Compute features
@@ -60,7 +57,4 @@ class JointEmbeddingModel(Module):
         z0 = self.projector(h0)
         z1 = self.projector(h1)
 
-        # Calculate loss
-        loss = self.loss(z0, z1, sw)
-
-        return loss
+        return z0, z1

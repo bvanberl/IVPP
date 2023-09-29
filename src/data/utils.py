@@ -4,6 +4,7 @@ import logging
 
 import pandas as pd
 from torch.utils.data import Dataset, DataLoader
+from torch.utils.data.distributed import DistributedSampler
 import wandb
 import albumentations as A
 import cv2
@@ -59,6 +60,7 @@ def prepare_bmode_pretrain_dataset(
         shuffle: bool = False,
         channels: int = 1,
         n_workers: int = 10,
+        distributed: bool = False,
         **preprocess_kwargs
 ) -> DataLoader:
     '''
@@ -74,6 +76,7 @@ def prepare_bmode_pretrain_dataset(
     :param channels: Number of channels
     :param max_time_delta: Maximum temporal separatino of two frames
     :param n_workers: Number of workers for preloading batches
+    :param distributed: If True, load images on multiple nodes
     :param preprocess_kwargs: Keyword arguments for preprocessing
     :return: A batched dataset ready for iterating over preprocessed batches
     '''
@@ -108,12 +111,18 @@ def prepare_bmode_pretrain_dataset(
     else:
         raise NotImplementedError(f"{pretrain_method} has not been implemented.")
 
+    if distributed:
+        sampler = DistributedSampler(dataset, shuffle=shuffle)
+        shuffle = None
+    else:
+        sampler = None
     data_loader = DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=n_workers,
-        pin_memory=True
+        pin_memory=True,
+        sampler=sampler
     )
     return data_loader
 
@@ -173,6 +182,8 @@ def load_data_for_pretrain(
         width: int = 128,
         height: int = 128,
         us_mode: str = "bmode",
+        distributed: bool = True,
+        n_workers: int = 10,
         **preprocess_kwargs
 ) -> (DataLoader, pd.DataFrame):
     """
@@ -191,6 +202,8 @@ def load_data_for_pretrain(
     :param max_pixel_val: Maximum value for pixel intensity
     :param width: Desired width of images
     :param height: Desired height of images
+    :param distributed: If True, load images on multiple nodes
+    :param n_workers: Number of workers for preloading batches
     :param preprocess_kwargs: Keyword arguments for preprocessing
     :return: dataset for pretraining
     """
@@ -247,6 +260,8 @@ def load_data_for_pretrain(
             augment_pipeline=augment_pipeline,
             shuffle=True,
             channels=channels,
+            distributed=distributed,
+            n_workers=n_workers,
             **preprocess_kwargs
         )
         if val_frames_df.shape[0] > 0:
@@ -260,6 +275,8 @@ def load_data_for_pretrain(
                 augment_pipeline="none",
                 shuffle=False,
                 channels=channels,
+                distributed=False,
+                n_workers=0,
                 **preprocess_kwargs
             )
         else:
@@ -279,6 +296,7 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
                              channels: int = 1,
                              n_classes: int = 2,
                              n_workers: int = 10,
+                             distributed: bool = False,
                              **preprocess_kwargs
                              ):
     '''
@@ -293,6 +311,7 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
     :param channels: Number of channels
     :param n_classes: Number of classes
     :param n_workers: Number of workers for loading images
+    :param distributed: If True, load images on multiple nodes
     :param preprocess_kwargs: Keyword arguments for the preprocessor initializer
     :return: A batched dataset loader
     '''
@@ -318,12 +337,18 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
             n_classes,
             transforms=transforms
         )
+    if distributed:
+        sampler = DistributedSampler(dataset, shuffle=shuffle)
+        shuffle = None
+    else:
+        sampler = None
     data_loader = DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=n_workers,
-        pin_memory=True
+        #pin_memory=True,
+        sampler=sampler
     )
     return data_loader
 
@@ -339,7 +364,7 @@ def load_data_supervised(cfg: dict,
                          redownload_data: bool = True,
                          percent_train: int = 100,
                          channels: int = 1,
-                         seed: int = 0
+                         seed: int = 0,
     ) -> (DataLoader, DataLoader, DataLoader, pd.DataFrame, pd.DataFrame, pd.DataFrame):
     '''
     Retrieve data, data splits, and returns an iterable preprocessed dataset for supervised learning experiments

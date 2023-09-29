@@ -52,8 +52,8 @@ def evaluate_on_dataset(
     with torch.no_grad():
         scalars = {"loss": 0.}
         for step, (x, y_true) in enumerate(ds, start=0):
-            y_true = y_true.cuda(gpu, non_blocking=True)
-            x = x.cuda(gpu, non_blocking=True)
+            y_true = y_true.cuda()
+            x = x.cuda()
 
             with torch.cuda.amp.autocast():
                 y_prob = classifier.forward(x)
@@ -95,11 +95,11 @@ if __name__ == '__main__':
     args = vars(parser.parse_args())
 
     os.environ['MASTER_ADDR'] = args['dist_url']
-    os.environ['MASTER_PORT'] = args['dist_port']
-    init_distributed_mode(args["dist_backend"], args["world_size"], args["dist_url"])
+    #os.environ['MASTER_PORT'] = args['dist_port']
+    current_device, rank = init_distributed_mode(args["dist_backend"], args["world_size"], args["dist_url"])
     torch.manual_seed(cfg['TRAIN']['SEED'])
     np.random.seed(cfg['TRAIN']['SEED'])
-    gpu = torch.device("cuda")
+    #gpu = torch.device("cuda")
 
     # Set up configuration for this run
     run_cfg = {k.lower(): v for k, v in cfg['TRAIN'].items()}
@@ -197,11 +197,11 @@ if __name__ == '__main__':
         cur_datetime
     )
     if not os.path.exists(checkpoint_dir):
-        os.makedirs(checkpoint_dir)
+        os.makedirs(checkpoint_dir, exist_ok=True)
     checkpoint_path = os.path.join(checkpoint_dir, "checkpoint.pth")
     log_dir = os.path.join(checkpoint_dir, "logs")
     os.makedirs(log_dir)
-    writer = SummaryWriter(log_dir)
+    writer = SummaryWriter(log_dir, exist_ok=True)
 
     # Save run config
     with open(os.path.join(checkpoint_dir, 'run_cfg.json'), 'w') as f:
@@ -218,7 +218,7 @@ if __name__ == '__main__':
     n_classes = train_df[label_col].nunique()
     h_dim = backbone(torch.randn((1,) + img_dim)).shape[-1]
     head = get_classifier_head(h_dim, fc_nodes, n_classes)
-    classifier = Sequential(backbone, head).cuda(gpu)
+    classifier = Sequential(backbone, head).cuda()
     print(backbone)
     print(head)
 
@@ -250,8 +250,8 @@ if __name__ == '__main__':
             epoch_step += 1
 
             # Pass inputs to device
-            x = x.cuda(gpu, non_blocking=True)
-            y_true = y_true.cuda(gpu, non_blocking=True)
+            x = x.cuda()
+            y_true = y_true.cuda()
 
             # Forward & backward pass
             optimizer.zero_grad()
@@ -287,7 +287,7 @@ if __name__ == '__main__':
             classifier,
             n_classes,
             loss_fn,
-            gpu,
+            current_device,
             start_step + epoch_step,
             writer,
             use_wandb
@@ -299,7 +299,7 @@ if __name__ == '__main__':
         scheduler.step(val_loss)  # Update LR if necessary
 
         # Save checkpoint if validation loss has improved
-        if val_loss < best_val_loss:
+        if val_loss < best_val_loss and rank == 0:
             print(f"Val loss improved from {best_val_loss} to {val_loss}. "
                   f"Updating checkpoint.")
             best_val_loss = val_loss
@@ -314,7 +314,7 @@ if __name__ == '__main__':
             classifier,
             n_classes,
             loss_fn,
-            gpu,
+            current_device,
             None,
             writer,
             use_wandb

@@ -40,9 +40,13 @@ def init_distributed_mode(
         world_size = int(os.environ['WORLD_SIZE'])
         gpu = int(os.environ['LOCAL_RANK'])
         init_method = dist_url
-    elif 'SLURM_PROCID' in os.environ:
-        rank = int(os.environ['SLURM_PROCID'])
-        gpu = rank % torch.cuda.device_count()
+    elif 'SLURM_LOCALID' in os.environ:
+        # rank = int(os.environ['SLURM_PROCID'])
+        # gpu = rank % torch.cuda.device_count()
+        ngpus_per_node = torch.cuda.device_count()
+        local_rank = int(os.environ.get("SLURM_LOCALID")) 
+        rank = int(os.environ.get("SLURM_NODEID")) * ngpus_per_node + local_rank
+        gpu = local_rank
 
         os.environ['RANK'] = str(rank)
         os.environ['LOCAL_RANK'] = str(gpu)
@@ -53,6 +57,7 @@ def init_distributed_mode(
         gpu = 0
         init_method = None
         print('Not using distributed mode.')
+    print(f'From rank {rank}, device ID {gpu} -- initializing process group.')
 
     torch.cuda.set_device(gpu)
     print('Distributed init (rank {}): {}, gpu {}'.format(
@@ -64,6 +69,7 @@ def init_distributed_mode(
         rank=rank
     )
     torch.distributed.barrier()
+    return gpu, rank
 
 
 def restore_backbone(
