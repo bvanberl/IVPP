@@ -1,10 +1,13 @@
 from typing import List
 
+import torch
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from torchvision.transforms import ToTensor, v2 #, Compose, RandomHorizontalFlip, Normalize, ToDtype
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
+
 
 def get_normalize_transform(
         mean_pixel_val: List[float] = None,
@@ -131,7 +134,7 @@ def get_bmode_baseline_augmentations(
         min_blur_sigma: float = 0.1,
         max_blur_sigma: float = 2.0,
         max_gauss_filter_width: int = 5
-) -> A.Compose:
+):
     """Applies random transformations to input B-mode image.
 
     Possible transforms include random crop & resize, contrast
@@ -151,29 +154,33 @@ def get_bmode_baseline_augmentations(
     :param max_gauss_filter_width: Maximum blur filter width
     :return: Callable augmentation pipeline
     """
-    return A.Compose([
-        A.RandomResizedCrop(
-            height,
-            width,
-            scale=(min_crop_area, max_crop_area),
-            p=crop_prob
-        ),
-        A.HorizontalFlip(p=0.5),
-        A.OneOrOther(
-            A.Compose([
-                A.RandomBrightness(max_brightness, p=brightness_prob),
-                A.RandomContrast(max_contrast, p=contrast_prob)
-            ]),
-            A.Compose([
-                A.RandomContrast(max_contrast, p=contrast_prob),
-                A.RandomBrightness(max_brightness, p=brightness_prob)
-            ])
-        ),
-        A.GaussianBlur(
-            blur_limit=max_gauss_filter_width,
-            sigma_limit=(min_blur_sigma, max_blur_sigma),
-            p=blur_prob
-        ),
-        A.Normalize(mean=[0., 0., 0.], std=[1., 1., 1., ]),
-        ToTensorV2(),
+    # return A.Compose([
+    #     A.RandomResizedCrop(
+    #         height,
+    #         width,
+    #         scale=(min_crop_area, max_crop_area),
+    #         p=crop_prob
+    #     ),
+    #     A.HorizontalFlip(p=0.5),
+    #     A.OneOrOther(
+    #         A.Compose([
+    #             A.RandomBrightness(max_brightness, p=brightness_prob),
+    #             A.RandomContrast(max_contrast, p=contrast_prob)
+    #         ]),
+    #         A.Compose([
+    #             A.RandomContrast(max_contrast, p=contrast_prob),
+    #             A.RandomBrightness(max_brightness, p=brightness_prob)
+    #         ])
+    #     ),
+    #     A.GaussianBlur(
+    #         blur_limit=max_gauss_filter_width,
+    #         sigma_limit=(min_blur_sigma, max_blur_sigma),
+    #         p=blur_prob
+    #     ),
+    #     A.Normalize(mean=[0., 0., 0.], std=[1., 1., 1., ]),
+    #     ToTensorV2(),
+    # ])
+    return v2.Compose([
+        ToTensor(),
+        #Normalize((0.,0.,0.),(1.,1.,1.))
     ])

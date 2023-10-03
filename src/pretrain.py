@@ -30,10 +30,10 @@ if __name__ == '__main__':
     parser.add_argument('--log_interval', default=20, type=int, help='Number of steps after which to log')
     parser.add_argument('--num_workers', required=False, default=0, type=int, help='Number of processes for loading data')
     args = vars(parser.parse_args())
+    print(f"Args: {args}")
 
     world_size = args["world_size"]
-    distributed = world_size > 1
-    if distributed:
+    if world_size > 1:
         current_device, rank = init_distributed_mode(args["dist_backend"], world_size, args["dist_url"])
     else:
         print("Not using distributed mode.")
@@ -74,7 +74,7 @@ if __name__ == '__main__':
         width=width,
         height=height,
         us_mode=us_mode,
-        distributed=distributed,
+        world_size=world_size,
         n_workers=n_workers,
         **hparams
     )
@@ -115,11 +115,11 @@ if __name__ == '__main__':
 
     # Define the base loss and initialize any regularizers
     if method.lower() in ['simclr']:
-        loss_fn = SimCLRLoss(tau=hparams["tau"], distributed=distributed)
+        loss_fn = SimCLRLoss(tau=hparams["tau"], distributed=(world_size > 1)).cuda()
     elif method.lower() in ['barlow_twins', 'ncus_barlow_twins']:
-        loss_fn = BarlowTwinsLoss(batch_size, lambda_=hparams["lambda_"], distributed=distributed)
+        loss_fn = BarlowTwinsLoss(batch_size, lambda_=hparams["lambda_"], distributed=(world_size > 1)).cuda()
     elif method.lower() in ['vicreg', 'ncus_vicreg']:
-        loss_fn = VICRegLoss(batch_size, lambda_=hparams["lambda_"], mu=hparams["mu"], nu=hparams["nu"], distributed=distributed)
+        loss_fn = VICRegLoss(batch_size, lambda_=hparams["lambda_"], mu=hparams["mu"], nu=hparams["nu"], distributed=(world_size > 1)).cuda()
     else:
         raise NotImplementedError(f'{method} is not currently supported.')
 
@@ -133,7 +133,7 @@ if __name__ == '__main__':
     ).cuda()
     print(model.backbone)
     print(model.projector)
-    if distributed:
+    if world_size > 1:
         model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[current_device])
     #torchsummary.summary(model, input_size=(channels, width, height))
@@ -175,7 +175,7 @@ if __name__ == '__main__':
 
     for epoch in range(epochs):
         print(f"Epoch {epoch + 1}/{epochs} " + "=" * 30 + "\n")
-        if distributed:
+        if world_size > 1:
             train_ds.sampler.set_epoch(epoch)
 
         start_step = epoch * len(train_ds)
@@ -185,11 +185,9 @@ if __name__ == '__main__':
             epoch_step += 1
 
             # Pass inputs to device
-            print(f"Time until device {time.time() - start_time}")
             x1 = x1.cuda()
             x2 = x2.cuda()
             sw = sw.cuda()
-            print(f"Time until forward pass {time.time() - start_time}")
 
             # Forward & backward pass
             optimizer.zero_grad()
@@ -203,16 +201,17 @@ if __name__ == '__main__':
 
             # Log the loss and pertinent metrics.
             batch_dur  = time.time() - start_time
-            scalars = {"loss": loss, "lr": scheduler.get_lr()[0], "epoch": epoch}
+            scalars = {"loss": loss, "lr": scheduler.get_lr()[0], "epoch": int(epoch)}
             scalars.update(loss_fn.get_instance_vars())
             if global_step % log_interval == 0:
                 log_scalars("train", scalars, global_step, writer, use_wandb)
                 print(f"Step {epoch_step + 1}/{batches_per_epoch}: " +
                       ", ".join([f"{m}: {scalars[m]:.4f}" for m in scalars]) +
-                      f", time: {batch_dur}, rank: {rank}")
+                      f", time: {batch_dur:.3f}, rank: {rank}")
 
         # Log validation set metrics
-        dist.barrier()
+        if world_size > 1:
+            dist.barrier()
         model = model.to('cpu')
         model.eval()
         with torch.no_grad():

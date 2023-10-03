@@ -8,6 +8,7 @@ wandb/
 results/
 artifacts/
 *.sh
+outfiles/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
