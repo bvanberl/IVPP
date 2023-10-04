@@ -32,8 +32,8 @@ def get_augmentation_transforms_pretrain(
     pipeline = pipeline.lower()
     if pipeline == "byol":
         return (
-            get_byol_augmentations(height, width, False),
-            get_byol_augmentations(height, width, True)
+            get_byol_augmentations(height, width),
+            get_byol_augmentations(height, width)
         )
     elif pipeline == "bmode_baseline":
         return (

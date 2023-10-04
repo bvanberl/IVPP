@@ -1,6 +1,6 @@
 PATHS:
-  IMAGES: "bmodes"
-  SPLITS: "splits/bmodes_splits"
+  IMAGES: "B:/Datasets/LUS_SSL/bmodes0/data/bmodes"
+  SPLITS: "B:/Datasets/LUS_SSL/bmodes0/splits/bmodes_splits"
   MODEL_WEIGHTS: "results/models"
 
 DATA:
@@ -13,17 +13,17 @@ DATA:
 PRETRAIN:
   SEED: 2
   EPOCHS: 30
-  BATCH_SIZE: 128
+  BATCH_SIZE: 512
   OPTIMIZER: 'lars'
   INIT_LR: 0.2
   WARMUP_EPOCHS: 3
   WEIGHT_DECAY: 0.000001
-  BACKBONE: 'vgg16'
+  BACKBONE: 'resnet14'
   PROJ_NODES: [1024, 1024]
   USE_BIAS: False
   IMAGENET_WEIGHTS: True
   USE_UNLABELLED: True
-  METHOD: "ncus_barlow_twins"
+  METHOD: "ncus_vicreg"
   AUGMENT_PIPELINE: "bmode_baseline"
   N_CUTOFF_LAYERS: 0
   HPARAMS:

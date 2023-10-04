@@ -59,19 +59,13 @@ class NCUSDataset(Dataset):
         x2_path = self._img_path_from_record(video_dir, video_id, img_idx2)
         x1 = cv2.imread(x1_path, self.img_read_flag)
         x2 = cv2.imread(x2_path, self.img_read_flag)
-        # x1 = datapoints.Image(read_image(str(x1_path)))
-        # x2 = datapoints.Image(read_image(str(x2_path)))
 
         # Apply data augmentation transforms
         try:
             if self.transforms1:
-                print(self.transforms1)
-                #x1 = self.transforms1(image=x1)["image"]
                 x1 = self.transforms1(x1)
-                print("X1: ", x1.dtype)
             if self.transforms2:
-                #x2 = self.transforms2(image=x2)["image"]
-                x2 = self.transforms(x2)
+                x2 = self.transforms2(x2)
         except Exception as e:
             print(e)
 

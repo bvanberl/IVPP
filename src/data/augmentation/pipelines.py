@@ -1,9 +1,9 @@
 from typing import List
 
-import torch
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
-from torchvision.transforms import ToTensor, v2 #, Compose, RandomHorizontalFlip, Normalize, ToDtype
+import torchvision
+from torchvision.transforms import ToTensor, v2
+
+torchvision.disable_beta_transforms_warning()
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
@@ -12,7 +12,7 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 def get_normalize_transform(
         mean_pixel_val: List[float] = None,
         std_pixel_val: List[float] = None
-) -> A.Normalize:
+) -> v2.Normalize:
     """Creates a pixel normalization transformation,
 
     Produces a pixel normalization transformation that
@@ -26,21 +26,21 @@ def get_normalize_transform(
         mean_pixel_val = IMAGENET_MEAN
     if std_pixel_val is None:
         std_pixel_val = IMAGENET_STD
-    return A.Normalize(
-        mean=mean_pixel_val,
-        std=std_pixel_val
-    )
+    return v2.Normalize(mean=mean_pixel_val, std=std_pixel_val)
 
-def get_validation_scaling() -> A.Compose:
+
+def get_validation_scaling(
+        mean_pixel_val: List[float] = None,
+        std_pixel_val: List[float] = None
+) -> v2.Compose:
     """Defines augmentation pipeline for supervised learning experiments.
-    :param brightness_delta: Maximum brightness increase/decrease, in [0, 1]
-    :param contrast_low: Lower bound for contrast transformation
-    :param contrast_high: Upper bound for contrast transformation
+    :param mean_pixel_val: Channel-wise means
+    :param std_pixel_val: Channel-wise standard deviation
     :return: Callable augmentation pipeline
     """
-    return A.Compose([
-        A.Normalize(mean=[0., 0., 0.], std=[1., 1., 1.,]),
-        ToTensorV2()    # Rescale to [0, 1] & convert to channels-first
+    return v2.Compose([
+        v2.ToTensor(),  # Rescale to [0, 1] & convert to channels-first
+        get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
 
 
@@ -48,83 +48,61 @@ def get_supervised_bmode_augmentions(
         brightness_delta: float = 0.4,
         contrast_low: float = 0.6,
         contrast_high: float = 1.4,
-    ) -> A.Compose:
+        mean_pixel_val: List[float] = None,
+        std_pixel_val: List[float] = None,
+    ) -> v2.Compose:
     """Defines augmentation pipeline for supervised learning experiments.
     :param brightness_delta: Maximum brightness increase/decrease, in [0, 1]
     :param contrast_low: Lower bound for contrast transformation
     :param contrast_high: Upper bound for contrast transformation
+    :param mean_pixel_val: Channel-wise means
+    :param std_pixel_val: Channel-wise standard deviation
     :return: Callable augmentation pipeline
     """
-    return A.Compose([
-        A.ColorJitter(
+    return v2.Compose([
+        ToTensor(),  # Rescale to [0, 1] & convert to channels-first
+        v2.ColorJitter(
             brightness=brightness_delta,
             contrast=(contrast_low, contrast_high),
             saturation=0.,
-            hue=0.,
-            p=1.
+            hue=0.
         ),
-        A.HorizontalFlip(p=0.5),
-        A.Normalize(mean=[0., 0., 0.], std=[1., 1., 1.,]),
-        ToTensorV2()    # Rescale to [0, 1] & convert to channels-first
+        v2.RandomHorizontalFlip(p=0.5),
+        get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
 
 def get_byol_augmentations(
         height: int,
         width: int,
-        t_prime: bool,
-) -> A.Compose:
+        mean_pixel_val: List[float] = None,
+        std_pixel_val: List[float] = None,
+) -> v2.Compose:
     """
     Applies random data transformations according to the data augmentations
-    procedure outlined in BYOL (https://arxiv.org/pdf/2006.07733.pdf),
-    Appendix B.
+    procedure outlined in VICReg (https://arxiv.org/pdf/2105.04906.pdf),
+    Appendix C.1, which is derived from BYOL.
     :param height: Image height
     :param width: Image width
-    :param t_prime: True if image is to be sampled from distribution, T'
+    :param mean_pixel_val: Channel-wise means
+    :param std_pixel_val: Channel-wise standard deviation
     :return: Callable augmentation pipeline
     """
-    if t_prime:
-        final_transforms = A.Compose([
-            A.GaussianBlur(
-                blur_limit=(23, 23),
-                sigma_limit=(0.2, 1.0),
-                p=0.1
-            ),
-            A.Solarize(threshold=128, p=0.2)
-        ])
-    else:
-        final_transforms = A.GaussianBlur(
-                blur_limit=(23, 23),
-                sigma_limit=(0.2, 1.0),
-                p=1.0
-        )
-    return A.Compose([
-        A.RandomResizedCrop(
-            height,
-            width,
-            scale=(0.08, 1.),
-            p=1.
-        ),
-        A.HorizontalFlip(p=0.5),
-        A.OneOrOther(
-            A.Compose([
-                A.RandomBrightness(0.4, p=0.8),
-                A.RandomContrast(0.4, p=0.8)
-            ]),
-            A.Compose([
-                A.RandomContrast(0.4, p=0.8),
-                A.RandomBrightness(0.4, p=0.8)
-            ])
-        ),
-        final_transforms,
-        A.Normalize(mean=[0., 0., 0.], std=[1., 1., 1., ]),
-        ToTensorV2()
+    return v2.Compose([
+        ToTensor(),
+        v2.RandomResizedCrop((height, width), scale=(0.08, 1.)),
+        v2.RandomHorizontalFlip(p=0.5),
+        v2.RandomApply([v2.ColorJitter(0.4, 0.4, 0., 0.)], p=0.8),
+        v2.RandomApply([v2.GaussianBlur(23)], p=0.8),
+        v2.RandomSolarize(0.5, p=0.1),
+        get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
+
 
 def get_bmode_baseline_augmentations(
         height: int,
         width: int,
         crop_prob: float = 0.8,
-        min_crop_area: float = 0.7,
+        min_crop_area: float = 0.4,
         max_crop_area: float = 1.0,
         brightness_prob: float = 0.5,
         max_brightness: float = 0.25,
@@ -133,7 +111,9 @@ def get_bmode_baseline_augmentations(
         blur_prob: float = 0.2,
         min_blur_sigma: float = 0.1,
         max_blur_sigma: float = 2.0,
-        max_gauss_filter_width: int = 5
+        gauss_filter_width: int = 5,
+        mean_pixel_val: List[float] = None,
+        std_pixel_val: List[float] = None,
 ):
     """Applies random transformations to input B-mode image.
 
@@ -151,36 +131,23 @@ def get_bmode_baseline_augmentations(
     :param blur_prob: Probability of Gaussian blur
     :param min_blur_sigma: Minimum blur kernel standard deviation
     :param max_blur_sigma: Maximum blur kernel standard deviation
-    :param max_gauss_filter_width: Maximum blur filter width
+    :param gauss_filter_width: Maximum blur filter width
+    :param mean_pixel_val: Channel-wise means
+    :param std_pixel_val: Channel-wise standard deviation
     :return: Callable augmentation pipeline
     """
-    # return A.Compose([
-    #     A.RandomResizedCrop(
-    #         height,
-    #         width,
-    #         scale=(min_crop_area, max_crop_area),
-    #         p=crop_prob
-    #     ),
-    #     A.HorizontalFlip(p=0.5),
-    #     A.OneOrOther(
-    #         A.Compose([
-    #             A.RandomBrightness(max_brightness, p=brightness_prob),
-    #             A.RandomContrast(max_contrast, p=contrast_prob)
-    #         ]),
-    #         A.Compose([
-    #             A.RandomContrast(max_contrast, p=contrast_prob),
-    #             A.RandomBrightness(max_brightness, p=brightness_prob)
-    #         ])
-    #     ),
-    #     A.GaussianBlur(
-    #         blur_limit=max_gauss_filter_width,
-    #         sigma_limit=(min_blur_sigma, max_blur_sigma),
-    #         p=blur_prob
-    #     ),
-    #     A.Normalize(mean=[0., 0., 0.], std=[1., 1., 1., ]),
-    #     ToTensorV2(),
-    # ])
     return v2.Compose([
         ToTensor(),
-        #Normalize((0.,0.,0.),(1.,1.,1.))
+        v2.RandomApply([
+            v2.RandomResizedCrop((height, width), scale=(min_crop_area, max_crop_area))
+        ], p=crop_prob),
+        v2.RandomHorizontalFlip(p=0.5),
+        v2.RandomApply([v2.ColorJitter(max_brightness, 0., 0., 0.)], p=brightness_prob),
+        v2.RandomApply([v2.ColorJitter(max_contrast, 0., 0., 0.)], p=contrast_prob),
+        v2.RandomApply([
+            v2.GaussianBlur(gauss_filter_width, (min_blur_sigma, max_blur_sigma))],
+            p=blur_prob),
+        v2.RandomSolarize(0.5, p=0.1),
+        get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
+

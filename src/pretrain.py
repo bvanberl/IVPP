@@ -28,7 +28,7 @@ if __name__ == '__main__':
     parser.add_argument('--dist_url', default="localhost", type=str, help='URL used to set up distributed training')
     parser.add_argument('--dist_backend', default='gloo', type=str, help='Backend for distributed package')
     parser.add_argument('--log_interval', default=20, type=int, help='Number of steps after which to log')
-    parser.add_argument('--num_workers', required=False, default=0, type=int, help='Number of processes for loading data')
+    parser.add_argument('--num_workers', required=False, default=2, type=int, help='Number of processes for loading data')
     args = vars(parser.parse_args())
     print(f"Args: {args}")
 
