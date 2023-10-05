@@ -4,6 +4,8 @@ import time
 
 import yaml
 import torch.distributed as dist
+import torchsummary
+import torchvision
 
 from src.models.joint_embedding import JointEmbeddingModel
 from src.losses.losses import *
@@ -12,6 +14,7 @@ from src.experiments.utils import *
 from src.custom.optimizers import LARS
 from src.custom.schedulers import WarmupCosineDecayLR
 
+torchvision.disable_beta_transforms_warning()
 cfg = yaml.full_load(open(os.getcwd() + "/config.yml", 'r'))
 if os.path.exists("./wandb.yml"):
     wandb_cfg = yaml.full_load(open(os.getcwd() + "/wandb.yml", 'r'))
@@ -108,7 +111,7 @@ if __name__ == '__main__':
             id=resume_id
         )
         print(f"Run config: {wandb_run}")
-        model_artifact = wandb.Artifact(f"pretrained:{method}", type="model")
+        model_artifact = wandb.Artifact(f"pretrained_{method}", type="model")
     else:
         wandb_run = None
         model_artifact = None
@@ -131,12 +134,13 @@ if __name__ == '__main__':
         backbone_cutoff_layers=n_cutoff_layers,
         projector_bias=use_bias
     ).cuda()
-    print(model.backbone)
-    print(model.projector)
+    # print(model.backbone)
+    # print(model.projector)
     if world_size > 1:
         model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[current_device])
-    #torchsummary.summary(model, input_size=(channels, width, height))
+    torchsummary.summary(model.backbone, input_size=(channels, width, height))
+    torchsummary.summary(model.projector, input_size=(model.h_dim,))
 
     epochs = cfg['PRETRAIN']['EPOCHS']
     base_lr = cfg['PRETRAIN']['INIT_LR']
@@ -171,6 +175,7 @@ if __name__ == '__main__':
     scaler = torch.cuda.amp.GradScaler()
     log_interval = args["log_interval"]
     pretrain_state = {}
+    last_val_loss = np.inf
 
 
     for epoch in range(epochs):
@@ -238,19 +243,20 @@ if __name__ == '__main__':
                   ", ".join([f"val/{m}: {val_scalars[m]:.4f}" for m in val_scalars]))
 
         # Save checkpoint
-        if rank == 0:
+        val_loss = val_scalars["loss"]
+        if rank == 0 and val_loss < last_val_loss:
             pretrain_state = dict(
                 epoch=epoch + 1,
                 model=model.state_dict(),
-                backbone=model.module.backbone.state_dict(),
+                backbone=model.backbone.state_dict(),
                 optimizer=optimizer.state_dict(),
                 loss_fn=loss_fn.state_dict(),
                 pretrain_method=method
             )
-            checkpoint_path = os.path.join(checkpoint_dir, "checkpoint.pth")
+            checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint.pth")
             torch.save(pretrain_state, checkpoint_path)
-            if use_wandb:
-                model_artifact.add_file(checkpoint_path)
+            # if use_wandb:
+            #     model_artifact.add_file(checkpoint_path)
         model.to(current_device)
 
     # Save the final pretrained model

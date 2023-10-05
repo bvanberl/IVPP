@@ -6,7 +6,6 @@ import pandas as pd
 import numpy as np
 from torch.utils.data import Dataset
 from torch.nn.functional import one_hot
-from torchvision.io import read_image
 
 
 class ImagePretrainDataset(Dataset):
@@ -88,7 +87,7 @@ class ImageClassificationDataset(Dataset):
 
         # Apply data augmentation transforms
         if self.transforms:
-            x = self.transforms(image=x)["image"]
+            x = self.transforms(x)
 
-        y = np.ones((1,)) * self.labels[idx]
+        y = self.labels[idx]
         return x, y

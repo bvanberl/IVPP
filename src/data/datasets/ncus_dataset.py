@@ -5,8 +5,6 @@ import pandas as pd
 import numpy as np
 from torch.utils.data import Dataset
 import cv2
-from torchvision.io import read_image
-from torchvision import datapoints
 
 
 class NCUSDataset(Dataset):

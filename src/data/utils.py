@@ -318,7 +318,11 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
     '''
 
     image_paths = image_df["filepath"].tolist()
-    labels = image_df[label_col].tolist()
+    if label_col in image_df.columns:
+        labels = image_df[label_col].to_numpy()
+    else:
+        print(f"No label column named {label_col}. Setting labels to 0.")
+        labels = np.zeros(image_df.shape[0], dtype=int)
     if augment_pipeline == "supervised":
         transforms = get_supervised_bmode_augmentions(**preprocess_kwargs)
     else:
