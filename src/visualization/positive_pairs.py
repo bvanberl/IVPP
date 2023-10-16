@@ -16,7 +16,7 @@ def visualize_views(
         max_pixel_value: float = 255.0,
         mean_pixel_value: Tuple[float, float, float] = (0., 0., 0.),
         std_pixel_value: Tuple[float, float, float] = (1., 1., 1.),
-        sample_weight: bool = False
+        sample_weight: bool = True
 ):
     '''Visualizes multiple positive pairs on same plot
 
@@ -68,7 +68,7 @@ def visualize_views(
         ) * max_pixel_value).astype(np.uint8)
         ax.imshow(np.concatenate([pair[0], divider, pair[1]], axis=1), cmap=colour_map)
         if len(views) > 2 and sample_weight:
-            ax.set_title(f"sw: {views[2][:num_views]}")
+            ax.set_title(f"sw: {views[2][i]:.3f}")
         ax.set_axis_off()
 
         label = labels[i] if labels else i

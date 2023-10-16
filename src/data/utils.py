@@ -45,8 +45,8 @@ def get_augmentation_transforms_pretrain(
             logging.warning(f"Unrecognized augmentation pipeline: {pipeline}.\n"
                             f"No augmentations will be applied.")
         return (
-            get_validation_scaling(),
-            get_validation_scaling(),
+            get_validation_scaling(height, width),
+            get_validation_scaling(height, width),
         )
 
 def prepare_bmode_pretrain_dataset(
@@ -74,7 +74,7 @@ def prepare_bmode_pretrain_dataset(
     :param augment: If True, applies data augmentation transforms to the inputs.
     :param shuffle: Flag indicating whether to shuffle the dataset
     :param channels: Number of channels
-    :param max_time_delta: Maximum temporal separatino of two frames
+    :param max_time_delta: Maximum temporal separation of two frames
     :param n_workers: Number of workers for preloading batches
     :param world_size: Number of processes. If 1, then not using distributed mode
     :param preprocess_kwargs: Keyword arguments for preprocessing
@@ -180,8 +180,8 @@ def load_data_for_pretrain(
         augment_pipeline: str = "bmode_baseline",
         use_unlabelled: bool = True,
         channels: int = 1,
-        width: int = 128,
-        height: int = 128,
+        width: int = 224,
+        height: int = 224,
         us_mode: str = "bmode",
         world_size: int = 1,
         n_workers: int = 10,
@@ -248,7 +248,10 @@ def load_data_for_pretrain(
         val_df = val_frames_df
     else:
         train_df = get_video_dataset_from_frames(train_frames_df, train_clips_df, ["fps"])
-        val_df = get_video_dataset_from_frames(val_frames_df, val_clips_df, ["fps"])
+        if val_frames_df.shape[0] > 0:
+            val_df = get_video_dataset_from_frames(val_frames_df, val_clips_df, ["fps"])
+        else:
+            val_df = None
 
     if us_mode == 'bmode':
         train_set = prepare_bmode_pretrain_dataset(
@@ -290,13 +293,15 @@ def load_data_for_pretrain(
 
 def prepare_labelled_dataset(image_df: pd.DataFrame,
                              img_root: str,
+                             height: int,
+                             width: int,
                              batch_size: int,
                              label_col: str,
                              shuffle: bool = False,
                              augment_pipeline: Optional[str] = None,
                              channels: int = 1,
                              n_classes: int = 2,
-                             n_workers: int = 10,
+                             n_workers: int = 0,
                              world_size: int = 1,
                              **preprocess_kwargs
                              ):
@@ -305,6 +310,8 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
     :param image_df: A table of image properties. Each row corresponds to an US image.
                      Must contain "filepath" and label_col columns
     :param img_root: Root directory containing images
+    :param height: Image height
+    :param width: Image width
     :param batch_size: Batch size for pretraining
     :param label_col: Column name containing label for downstream task
     :param shuffle: Flag indicating whether to shuffle the dataset
@@ -319,17 +326,17 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
 
     image_paths = image_df["filepath"].tolist()
     if label_col in image_df.columns:
-        labels = image_df[label_col].to_numpy()
+        labels = image_df[label_col].to_numpy(dtype=np.int64)
     else:
         print(f"No label column named {label_col}. Setting labels to 0.")
-        labels = np.zeros(image_df.shape[0], dtype=int)
+        labels = np.zeros(image_df.shape[0], dtype=float)
     if augment_pipeline == "supervised":
-        transforms = get_supervised_bmode_augmentions(**preprocess_kwargs)
+        transforms = get_supervised_bmode_augmentions(height, width, **preprocess_kwargs)
     else:
         if augment_pipeline != "none":
             logging.warning(f"Unrecognized augmentation pipeline: {augment_pipeline}.\n"
                             f"No augmentations will be applied.")
-        transforms = get_validation_scaling()
+        transforms = get_validation_scaling(height, width)
     if label_col == 'lung_sliding':
         # TODO: Add M-mode preprocessor
         raise NotImplementedError("M-mode data not supported yet.")
@@ -369,8 +376,12 @@ def load_data_supervised(cfg: dict,
                          splits_version: str = 'latest',
                          redownload_data: bool = True,
                          percent_train: int = 100,
+                         height: int = 224,
+                         width: int = 224,
                          channels: int = 1,
                          seed: int = 0,
+                         fold: Optional[int] = None,
+                         k: Optional[int] = None,
     ) -> (DataLoader, DataLoader, DataLoader, pd.DataFrame, pd.DataFrame, pd.DataFrame):
     '''
     Retrieve data, data splits, and returns an iterable preprocessed dataset for supervised learning experiments
@@ -384,9 +395,13 @@ def load_data_supervised(cfg: dict,
     :param splits_version: Artifact version for train/val/test splits
     :param redownload_data: Flag indicating whether the dataset artifact should be redownloaded
     :param percent_train: Proportion of train set to use for training. Integer in [1, 100]
-    :param n_channels: Number of channels
+    :param height: Image height
+    :param width: Image width
+    :param channels: Number of channels
     :param oversample_minority: True if the minority class is upsampled to balance class distribution, False otherwise
     :param seed: Random state that ensures replicable training set shuffling prior to taking `percent_train` of it
+    :param fold: Test set fold identifier. Only set if executing k-fold cross validation.
+    :param k: Total number of folds if executing k-fold cross validation.
     :return: (training set, validation set, test set, training set table, validation set table, test set table, )
     '''
 
@@ -400,26 +415,37 @@ def load_data_supervised(cfg: dict,
         data_dir = cfg["PATHS"]["IMAGES"]
         splits_dir = cfg["PATHS"]["SPLITS"]
 
-    train_frames_df = pd.read_csv(os.path.join(splits_dir, 'train_set_frames.csv'))
-    train_frames_df = train_frames_df.sample(frac=1.0, random_state=seed)
-    if percent_train < 1.0:
-        n_train_examples = int(percent_train * train_frames_df.shape[0])
-        train_frames_df = train_frames_df.iloc[:n_train_examples]
+    if fold is None:
+        train_frames_df = pd.read_csv(os.path.join(splits_dir, 'train_set_frames.csv'))
+        train_frames_df = train_frames_df.sample(frac=1.0, random_state=seed)
+        if percent_train < 1.0:
+            n_train_examples = int(percent_train * train_frames_df.shape[0])
+            train_frames_df = train_frames_df.iloc[:n_train_examples]
 
-    val_frames_path = os.path.join(splits_dir, 'val_set_frames.csv')
-    val_frames_df = pd.read_csv(val_frames_path) if os.path.exists(val_frames_path) else pd.DataFrame()
-    test_frames_path = os.path.join(splits_dir, 'test_set_frames.csv')
-    test_frames_df = pd.read_csv(test_frames_path) if os.path.exists(test_frames_path) else pd.DataFrame()
+        val_frames_path = os.path.join(splits_dir, 'val_set_frames.csv')
+        val_frames_df = pd.read_csv(val_frames_path) if os.path.exists(val_frames_path) else pd.DataFrame()
+        test_frames_path = os.path.join(splits_dir, 'test_set_frames.csv')
+        test_frames_df = pd.read_csv(test_frames_path) if os.path.exists(test_frames_path) else pd.DataFrame()
 
-    # Remove examples that do not have a label relevant for the current task
-    train_frames_df = train_frames_df.loc[train_frames_df[label_col] != -1]
-    val_frames_df = val_frames_df.loc[val_frames_df[label_col] != -1]
-    test_frames_df = test_frames_df.loc[test_frames_df[label_col] != -1]
+        # Remove examples that do not have a label relevant for the current task
+        train_frames_df = train_frames_df.loc[train_frames_df[label_col] != -1]
+        val_frames_df = val_frames_df.loc[val_frames_df[label_col] != -1]
+        test_frames_df = test_frames_df.loc[test_frames_df[label_col] != -1]
+    else:
+        test_frames_df = pd.read_csv(os.path.join(splits_dir, f'fold{fold}_frames.csv'))
+        val_frames_df = test_frames_df #pd.DataFrame(columns=test_frames_df.columns)    # Empty validation set
+        train_frames_df = pd.DataFrame(columns=test_frames_df.columns)
+        for i in range(1, k + 1):
+            if i != fold:
+                fold_df = pd.read_csv(os.path.join(splits_dir, f'fold{i}_frames.csv'))
+                train_frames_df = pd.concat([train_frames_df, fold_df], axis=0)
+
     n_classes = train_frames_df[label_col].nunique()
-
     train_set = prepare_labelled_dataset(
         train_frames_df,
         data_dir,
+        height,
+        width,
         batch_size,
         label_col,
         augment_pipeline="supervised",
@@ -430,6 +456,8 @@ def load_data_supervised(cfg: dict,
     val_set = prepare_labelled_dataset(
         val_frames_df,
         data_dir,
+        height,
+        width,
         batch_size,
         label_col,
         augment_pipeline="none",
@@ -440,6 +468,8 @@ def load_data_supervised(cfg: dict,
     test_set = prepare_labelled_dataset(
         test_frames_df,
         data_dir,
+        height,
+        width,
         batch_size,
         label_col,
         augment_pipeline="none",

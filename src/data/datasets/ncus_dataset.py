@@ -40,7 +40,6 @@ class NCUSDataset(Dataset):
 
     def __getitem__(self, idx: int):
         video_dir = self.video_dirs[idx]
-        video_id = self.video_ids[idx]
         n_frames = self.img_counts[idx]
         fps = self.fps[idx]
 
@@ -53,8 +52,8 @@ class NCUSDataset(Dataset):
         img_idx2 = np.random.randint(idx2_min, idx2_max + 1, dtype=int)
 
         # Load images
-        x1_path = self._img_path_from_record(video_dir, video_id, img_idx1)
-        x2_path = self._img_path_from_record(video_dir, video_id, img_idx2)
+        x1_path = self._img_path_from_record(video_dir, img_idx1)
+        x2_path = self._img_path_from_record(video_dir, img_idx2)
         x1 = cv2.imread(x1_path, self.img_read_flag)
         x2 = cv2.imread(x2_path, self.img_read_flag)
 
@@ -70,14 +69,14 @@ class NCUSDataset(Dataset):
         # Determine sample weight according to distance between images
         if self.sample_weights:
             frame_delta = np.abs(img_idx2 - img_idx1)
-            sw = (max_dur_frame_delta - frame_delta) / max_dur_frame_delta
+            sw = (max_dur_frame_delta - frame_delta + 1.) / (max_dur_frame_delta + 1.)
         else:
             sw = 1.
         return x1, x2, sw
 
-    def _img_path_from_record(self, video_dir: str, video_id: str, img_idx: int) -> str:
+    def _img_path_from_record(self, video_dir: str, img_idx: int) -> str:
         return os.path.join(
             self.img_root_dir,
             video_dir,
-            f"{video_id}_{img_idx}{self.img_ext}"
+            f"{img_idx:05d}{self.img_ext}"
         )

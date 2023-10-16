@@ -76,7 +76,8 @@ def restore_backbone(
         backbone: Module,
         checkpoint: str,
         use_wandb: bool = False,
-        wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None
+        wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None,
+        freeze_prefix: str = None
 ) -> (Module, str):
     """Restores a serialized feature extractor's weights
 
@@ -98,6 +99,10 @@ def restore_backbone(
                          f"or that it is a valid artefact ID and that wandb is enabled.")
     state_dict = torch.load(checkpoint_path)
     backbone.load_state_dict(state_dict["backbone"])
+    if freeze_prefix:
+        for name, param in backbone.named_parameters():
+            if not name.startswith(freeze_prefix):
+                param.requires_grad = False
     pretrain_method = state_dict["pretrain_method"]
     return backbone, pretrain_method
 
@@ -174,17 +179,20 @@ def get_classification_metrics(
     """
     metrics = {}
     metrics["auc"] = roc_auc_score(y_true, y_prob)
-    metrics["accuracy"] = accuracy_score(y_true, y_pred)
     if n_classes == 2:
         metrics["precision"] = precision_score(y_true, y_pred, zero_division=0.)
         metrics["recall"] = recall_score(y_true, y_pred, zero_division=0.)
+        metrics["specificity"] = recall_score(1 - y_true, 1 - y_pred, zero_division=0.)
         metrics["f1"] = f1_score(y_true, y_pred, zero_division=0.)
     else:
+        y_true = np.argmax(y_true, -1)
         for i in range(n_classes):
             y_true_class = (y_true == i).astype(np.int64)
             y_pred_class = (y_pred == i).astype(np.int64)
-            metrics["class{i}_precision"] = precision_score(y_true_class, y_pred_class, zero_division=0.)
-            metrics["class{i}_recall"] = recall_score(y_true_class, y_pred_class, zero_division=0.)
-            metrics["class{i}_f1"] = f1_score(y_true_class, y_pred_class, zero_division=0.)
+            metrics[f"class{i}_precision"] = precision_score(y_true_class, y_pred_class, zero_division=0.)
+            metrics[f"class{i}_recall"] = recall_score(y_true_class, y_pred_class, zero_division=0.)
+            metrics[f"class{i}_specificity"] = recall_score(1 - y_true_class, 1 - y_pred_class, zero_division=0.)
+            metrics[f"class{i}_f1"] = f1_score(y_true_class, y_pred_class, zero_division=0.)
+    metrics["accuracy"] = accuracy_score(y_true, y_pred)
     return metrics
 

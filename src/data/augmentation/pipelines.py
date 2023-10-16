@@ -30,21 +30,28 @@ def get_normalize_transform(
 
 
 def get_validation_scaling(
+        height: int,
+        width: int,
         mean_pixel_val: List[float] = None,
         std_pixel_val: List[float] = None
 ) -> v2.Compose:
     """Defines augmentation pipeline for supervised learning experiments.
+    :param height: Image height
+    :param width: Image width
     :param mean_pixel_val: Channel-wise means
     :param std_pixel_val: Channel-wise standard deviation
     :return: Callable augmentation pipeline
     """
     return v2.Compose([
         v2.ToTensor(),  # Rescale to [0, 1] & convert to channels-first
+        v2.Resize((height, width), antialias=True),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
 
 
 def get_supervised_bmode_augmentions(
+        height: int,
+        width: int,
         brightness_delta: float = 0.4,
         contrast_low: float = 0.6,
         contrast_high: float = 1.4,
@@ -52,6 +59,8 @@ def get_supervised_bmode_augmentions(
         std_pixel_val: List[float] = None,
     ) -> v2.Compose:
     """Defines augmentation pipeline for supervised learning experiments.
+    :param height: Image height
+    :param width: Image width
     :param brightness_delta: Maximum brightness increase/decrease, in [0, 1]
     :param contrast_low: Lower bound for contrast transformation
     :param contrast_high: Upper bound for contrast transformation
@@ -61,6 +70,7 @@ def get_supervised_bmode_augmentions(
     """
     return v2.Compose([
         ToTensor(),  # Rescale to [0, 1] & convert to channels-first
+        v2.Resize((height, width), antialias=True),
         v2.ColorJitter(
             brightness=brightness_delta,
             contrast=(contrast_low, contrast_high),
@@ -89,7 +99,7 @@ def get_byol_augmentations(
     """
     return v2.Compose([
         ToTensor(),
-        v2.RandomResizedCrop((height, width), scale=(0.08, 1.)),
+        v2.RandomResizedCrop((height, width), scale=(0.08, 1.), antialias=True),
         v2.RandomHorizontalFlip(p=0.5),
         v2.RandomApply([v2.ColorJitter(0.4, 0.4, 0., 0.)], p=0.8),
         v2.RandomApply([v2.GaussianBlur(23)], p=0.8),
@@ -101,7 +111,6 @@ def get_byol_augmentations(
 def get_bmode_baseline_augmentations(
         height: int,
         width: int,
-        crop_prob: float = 0.8,
         min_crop_area: float = 0.4,
         max_crop_area: float = 1.0,
         brightness_prob: float = 0.5,
@@ -121,7 +130,6 @@ def get_bmode_baseline_augmentations(
     change, Gaussian blur, and horizontal flip.
     :param height: Image height
     :param width: Image width
-    :param crop_prob: Probability of random crop
     :param min_crop_area: Minimum area of cropped region
     :param max_crop_area: Maximum area of cropped region
     :param brightness_prob: Probability of brightness change
@@ -138,16 +146,13 @@ def get_bmode_baseline_augmentations(
     """
     return v2.Compose([
         ToTensor(),
-        v2.RandomApply([
-            v2.RandomResizedCrop((height, width), scale=(min_crop_area, max_crop_area))
-        ], p=crop_prob),
+        v2.RandomResizedCrop((height, width), scale=(min_crop_area, max_crop_area), antialias=True),
         v2.RandomHorizontalFlip(p=0.5),
         v2.RandomApply([v2.ColorJitter(max_brightness, 0., 0., 0.)], p=brightness_prob),
         v2.RandomApply([v2.ColorJitter(max_contrast, 0., 0., 0.)], p=contrast_prob),
         v2.RandomApply([
             v2.GaussianBlur(gauss_filter_width, (min_blur_sigma, max_blur_sigma))],
             p=blur_prob),
-        v2.RandomSolarize(0.5, p=0.1),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
 

@@ -1,22 +1,22 @@
 PATHS:
-  IMAGES: "B:/Datasets/LUS_SSL/bmodes0/data/bmodes"
-  SPLITS: "B:/Datasets/LUS_SSL/bmodes0/splits/bmodes_splits"
+  IMAGES: "data/bmodes"
+  SPLITS: "splits/bmodes_splits"
   MODEL_WEIGHTS: "results/models"
 
 DATA:
-  HEIGHT: 128
-  WIDTH: 128
+  HEIGHT: 224
+  WIDTH: 224
   MIN_PIXEL_VALUE: 0.0
   MAX_PIXEL_VALUE: 255.0
   NUM_CHANNELS: 3
 
 PRETRAIN:
-  SEED: 2
-  EPOCHS: 20
+  SEED: 11
+  EPOCHS: 300
   BATCH_SIZE: 512
   OPTIMIZER: 'lars'
   INIT_LR: 0.2
-  WARMUP_EPOCHS: 2
+  WARMUP_EPOCHS: 3
   WEIGHT_DECAY: 0.000001
   BACKBONE: 'resnet14'
   PROJ_NODES: [512, 512]
@@ -43,12 +43,12 @@ PRETRAIN:
       LAMBDA_: 50.0
       MU: 25.0
       NU: 1.0
-      MAX_TIME_DELTA: 0.5
+      MAX_TIME_DELTA: 1.0
       SAMPLE_WEIGHTS: True
     NCUS_BARLOW_TWINS:
       LAMBDA_: 0.005
-      MAX_TIME_DELTA: 0.5
-      SAMPLE_WEIGHTS: True
+      MAX_TIME_DELTA: 3
+      SAMPLE_WEIGHTS: False
     NCUS_SIMCLR:
       TEMPERATURE: 0.5
       MAX_TIME_DELTA: 1.0
@@ -56,16 +56,18 @@ PRETRAIN:
 
 TRAIN:
   EXPERIMENT: 'fine-tune'
+  FOLDS: 5
   SEED: 1
-  BACKBONE_TYPE: 'vgg16'
-  LABEL: 'ab_lines_label'
+  BACKBONE_TYPE: 'resnet14'
+  LABEL: 'label'
   PROP_TRAIN: 1.0
-  BACKBONE_WEIGHTS: 'imagenet'
-  BATCH_SIZE: 256
+  BACKBONE_WEIGHTS: 'results/models/pretrained/ncus_vicreg/bmode20231013-butte/best_model.pth' #'imagenet'
+  BATCH_SIZE: 32
   N_CUTOFF_LAYERS: 0
-  EPOCHS: 10
-  LR_BACKBONE: 0.0001
-  LR_HEAD: 0.001
+  EPOCHS: 100
+  LR_BACKBONE: 0.01 #0.0001
+  LR_HEAD: 0.01 #0.02
   MOMENTUM: 0.9
-  WEIGHT_DECAY: 0.01
+  WEIGHT_DECAY: 0.0001
   MLP_HIDDEN_LAYERS: [32]
+  FREEZE_PREFIX: "layer3"

@@ -9,7 +9,7 @@ from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-plt.rcParams['font.family'] = 'serif'
+plt.rcParams['font.family'] = 'Times New Roman'
 import torchvision
 torchvision.disable_beta_transforms_warning()
 
@@ -26,7 +26,9 @@ def get_features(
         channels: int = 3,
         backbone_type: str = "mobilenetv3",
         n_cutoff_layers: int = 0,
-        batch_size: int = 256
+        batch_size: int = 256,
+        height: int = 224,
+        width: int = 224
 ):
     """Obtains predicted features for a feature extractor
 
@@ -40,14 +42,14 @@ def get_features(
     :param image_dir: Path to directory containing images
     :param label_col: Column of spreadsheet containing label
     :param feats_path: Path at which to save features as .npy
-    :param height: Image height
-    :param width: Image width
     :param channels: Number of image channels
     :param backbone_type: Backbone architecture to be used
         when not loading a pretrained model
     :param n_cutoff_layers: Number of layers to remove from the end of the
         backbone model.
     :param batch_size: Batch size for prediction
+    :param height: Image height
+    :param width: Image width
     """
 
     if os.path.exists(feats_path):
@@ -69,6 +71,8 @@ def get_features(
         ds = prepare_labelled_dataset(
             image_df,
             image_dir,
+            height,
+            width,
             batch_size,
             label_col,
             channels=channels,
@@ -112,12 +116,12 @@ def plot_embedding(
             marker=f"o",
             s=2,
             color=plt.cm.Dark2(l),
-            alpha=0.7,
+            alpha=1.0,
             zorder=2,
             label=label_names[l]
         )
     ax.axis("off")
-    ax.legend(fontsize=20, loc=4)
+    ax.legend(fontsize=18, loc='upper center', bbox_to_anchor=(0.5, 0.05), markerscale=10, ncol=2)
     plt.savefig(save_path)
 
 def do_tsne(

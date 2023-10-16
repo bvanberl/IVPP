@@ -1,6 +1,8 @@
 import argparse
 import datetime
+import os
 import time
+import json
 
 import yaml
 import torch.distributed as dist
@@ -31,7 +33,7 @@ if __name__ == '__main__':
     parser.add_argument('--dist_url', default="localhost", type=str, help='URL used to set up distributed training')
     parser.add_argument('--dist_backend', default='gloo', type=str, help='Backend for distributed package')
     parser.add_argument('--log_interval', default=20, type=int, help='Number of steps after which to log')
-    parser.add_argument('--num_workers', required=False, default=2, type=int, help='Number of processes for loading data')
+    parser.add_argument('--num_workers', required=False, default=6, type=int, help='Number of processes for loading data')
     args = vars(parser.parse_args())
     print(f"Args: {args}")
 
@@ -81,6 +83,7 @@ if __name__ == '__main__':
         n_workers=n_workers,
         **hparams
     )
+
     n_examples = train_df.shape[0]
     batches_per_epoch = len(train_ds)
     img_dim = (batch_size, channels, height, width)
@@ -165,7 +168,12 @@ if __name__ == '__main__':
     cur_datetime = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     checkpoint_dir = os.path.join(cfg['PATHS']['MODEL_WEIGHTS'], 'pretrained', method,
                                   us_mode + cur_datetime)
+    run_cfg_path = os.path.join(checkpoint_dir, "run_cfg.json")
+    # with open(run_cfg_path, "w") as f:
+    #     config_str = json.dumps(run_cfg)
+    #     json.dump(config_str, f)
     os.makedirs(checkpoint_dir, exist_ok=True)
+
     log_dir = os.path.join(checkpoint_dir, "logs")
     if rank == 0:
         os.makedirs(log_dir, exist_ok=True)
@@ -205,7 +213,7 @@ if __name__ == '__main__':
             scheduler.step()   # Update LR
 
             # Log the loss and pertinent metrics.
-            batch_dur  = time.time() - start_time
+            batch_dur = time.time() - start_time
             scalars = {"loss": loss, "lr": scheduler.get_lr()[0], "epoch": int(epoch)}
             scalars.update(loss_fn.get_instance_vars())
             if global_step % log_interval == 0:
@@ -215,36 +223,41 @@ if __name__ == '__main__':
                       f", time: {batch_dur:.3f}, rank: {rank}")
 
         # Log validation set metrics
-        if world_size > 1:
-            dist.barrier()
-        model = model.to('cpu')
-        model.eval()
-        with torch.no_grad():
-            val_scalars = {"loss": 0.}
-            val_scalars.update({m: 0. for m in loss_fn.get_instance_vars()})
-            for val_step, (x1, x2, sw) in enumerate(val_ds, start=0):
+        if val_ds:
+            if world_size > 1:
+                dist.barrier()
+            model = model.to('cpu')
+            model.eval()
+            with torch.no_grad():
+                val_scalars = {"loss": 0.}
+                val_scalars.update({m: 0. for m in loss_fn.get_instance_vars()})
+                for val_step, (x1, x2, sw) in enumerate(val_ds, start=0):
 
-                optimizer.zero_grad()
-                with torch.cuda.amp.autocast():
-                    z1, z2 = model.forward(x1, x2)
-                    loss = loss_fn(z1, z2, sw=sw)
+                    optimizer.zero_grad()
+                    with torch.cuda.amp.autocast():
+                        z1, z2 = model.forward(x1, x2)
+                        loss = loss_fn(z1, z2, sw=sw)
 
-                # Accumulate validation loss components
-                val_scalars["loss"] += loss
-                step_metrics = loss_fn.get_instance_vars()
-                for m in step_metrics:
-                    val_scalars[m] += step_metrics[m]
+                    # Accumulate validation loss components
+                    val_scalars["loss"] += loss
+                    step_metrics = loss_fn.get_instance_vars()
+                    for m in step_metrics:
+                        val_scalars[m] += step_metrics[m]
 
-            # Log validation loss components
-            for m in val_scalars:
-                val_scalars[m] /= len(val_ds)
-            log_scalars("val", val_scalars, start_step + epoch_step, writer, use_wandb)
-            print(f"Epoch {epoch + 1}: " +
-                  ", ".join([f"val/{m}: {val_scalars[m]:.4f}" for m in val_scalars]))
+                # Log validation loss components
+                for m in val_scalars:
+                    val_scalars[m] /= len(val_ds)
+                log_scalars("val", val_scalars, start_step + epoch_step, writer, use_wandb)
+                print(f"Epoch {epoch + 1}: " +
+                      ", ".join([f"val/{m}: {val_scalars[m]:.4f}" for m in val_scalars]))
 
         # Save checkpoint
-        val_loss = val_scalars["loss"]
-        if rank == 0 and val_loss < last_val_loss:
+        if val_ds:
+            val_loss = val_scalars["loss"]
+            val_check = val_loss < last_val_loss
+        else:
+            val_check = True
+        if rank == 0 and val_check:
             pretrain_state = dict(
                 epoch=epoch + 1,
                 model=model.state_dict(),

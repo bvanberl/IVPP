@@ -4,6 +4,7 @@ from typing import Optional, Callable, List
 import cv2
 import pandas as pd
 import numpy as np
+import torch
 from torch.utils.data import Dataset
 from torch.nn.functional import one_hot
 
@@ -52,7 +53,7 @@ class ImageClassificationDataset(Dataset):
             self,
             img_root_dir: str,
             img_paths: List[str],
-            labels: List[int],
+            labels: np.ndarray,
             channels: int,
             n_classes: int,
             transforms: Optional[Callable],
@@ -62,9 +63,9 @@ class ImageClassificationDataset(Dataset):
         self.img_root_dir = img_root_dir
         self.image_paths = img_paths
         if n_classes > 2:
-            self.labels = one_hot(labels, num_classes=n_classes)
+            self.labels = one_hot(torch.from_numpy(labels), num_classes=n_classes)
         else:
-            self.labels = labels
+            self.labels = np.expand_dims(labels, axis=-1).astype(np.float32)
         if channels == 1:
             self.img_read_flag = cv2.IMREAD_GRAYSCALE
         else:
