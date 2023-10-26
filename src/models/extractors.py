@@ -13,100 +13,100 @@ MOBILENETV3S_WEIGHTS = "https://download.pytorch.org/models/mobilenet_v3_small-0
 VGG16_WEIGHTS = "https://download.pytorch.org/models/vgg16-397923af.pth"
 
 
-def get_backbone(
-        backbone_name: str,
+def get_extractor(
+        extractor_name: str,
         imagenet_weights: bool = False,
         n_cutoff_layers: int = 0
 ) -> Module:
-    '''Initializes the desired backbone.
-    :param backbone_name: A string in the list below specifying the model
+    '''Initializes the desired extractor.
+    :param extractor_name: A string in the list below specifying the model
     :param imagenet_weights: Flag indicating whether to initialize layers
         with ImageNet-pretrained weights. If False, weights will be randomly
         initialized and bias units will be disabled.
     :param n_cutoff_layers: Number of layers to remove from the end of the
-        backbone model.
-    :return: TensorFlow model callable for the backbone, yet to be compiled
+        extractor model.
+    :return: TensorFlow model callable for the extractor, yet to be compiled
     '''
 
-    backbone_name = backbone_name.lower()
-    if backbone_name == 'resnet18':
+    extractor_name = extractor_name.lower()
+    if extractor_name == 'resnet18':
         model = get_resnet18(imagenet_weights, n_cutoff_layers)
-    elif backbone_name == 'resnet14':
+    elif extractor_name == 'resnet14':
         model = get_resnet14(imagenet_weights, n_cutoff_layers)
-    elif backbone_name == 'efficientnetv2b0':
+    elif extractor_name == 'efficientnetv2b0':
         model = get_efficientnetv2s(imagenet_weights, n_cutoff_layers)
-    elif backbone_name == 'mobilenetv3':
+    elif extractor_name == 'mobilenetv3':
         model = get_mobilenetv3s(imagenet_weights, n_cutoff_layers)
-    elif backbone_name == 'vgg16':
+    elif extractor_name == 'vgg16':
         model = get_vgg16(imagenet_weights, n_cutoff_layers)
     else:
-        raise Exception(f"Unsupported backbone architecture: {backbone_name}")
+        raise Exception(f"Unsupported extractor architecture: {extractor_name}")
     return model
 
 def get_resnet18(
     imagenet_weights: bool = False,
     n_cutoff_layers: int = 0
 ) -> Module:
-    backbone = resnet18()
+    extractor = resnet18()
     if imagenet_weights:
         state_dict = torch.hub.load_state_dict_from_url(RESNET18_WEIGHTS)
-        backbone.load_state_dict(state_dict)
-    backbone.fc = Identity()
+        extractor.load_state_dict(state_dict)
+    extractor.fc = Identity()
     if n_cutoff_layers > 0:
-        backbone = Sequential(*list(backbone.children())[:-(n_cutoff_layers + 1)])
-    return backbone
+        extractor = Sequential(*list(extractor.children())[:-(n_cutoff_layers + 1)])
+    return extractor
 
 def get_resnet14(
     imagenet_weights: bool = False,
     n_cutoff_layers: int = 0
 ) -> Module:
-    backbone = resnet18()
+    extractor = resnet18()
     if imagenet_weights:
         state_dict = torch.hub.load_state_dict_from_url(RESNET18_WEIGHTS)
-        backbone.load_state_dict(state_dict)
-    backbone.layer4 = Identity()
-    backbone.fc = Identity()
+        extractor.load_state_dict(state_dict)
+    extractor.layer4 = Identity()
+    extractor.fc = Identity()
     if n_cutoff_layers > 0:
-        backbone = Sequential(*list(backbone.children())[:-(n_cutoff_layers + 1)])
-    return backbone
+        extractor = Sequential(*list(extractor.children())[:-(n_cutoff_layers + 1)])
+    return extractor
 
 def get_efficientnetv2s(
     imagenet_weights: bool = False,
     n_cutoff_layers: int = 0
 ) -> Module:
-    backbone = efficientnet_v2_s()
+    extractor = efficientnet_v2_s()
     if imagenet_weights:
         state_dict = torch.hub.load_state_dict_from_url(EFFICIENTNETV2S_WEIGHTS)
-        backbone.load_state_dict(state_dict)
-    backbone.fc = Identity()
+        extractor.load_state_dict(state_dict)
+    extractor.fc = Identity()
     if n_cutoff_layers > 0:
-        backbone = Sequential(*list(backbone.children())[:-(n_cutoff_layers + 1)])
-    return backbone
+        extractor = Sequential(*list(extractor.children())[:-(n_cutoff_layers + 1)])
+    return extractor
 
 def get_mobilenetv3s(
     imagenet_weights: bool = False,
     n_cutoff_layers: int = 0
 ) -> Module:
-    backbone = mobilenet_v3_small()
+    extractor = mobilenet_v3_small()
     if imagenet_weights:
         state_dict = torch.hub.load_state_dict_from_url(MOBILENETV3S_WEIGHTS)
-        backbone.load_state_dict(state_dict)
-    backbone.classifier = Identity()
-    backbone.fc = Identity()
+        extractor.load_state_dict(state_dict)
+    extractor.classifier = Identity()
+    extractor.fc = Identity()
     if n_cutoff_layers > 0:
-        backbone = Sequential(*list(backbone.children())[:-(n_cutoff_layers + 1)])
-    return backbone
+        extractor = Sequential(*list(extractor.children())[:-(n_cutoff_layers + 1)])
+    return extractor
 
 def get_vgg16(
     imagenet_weights: bool = False,
     n_cutoff_layers: int = 0
 ) -> Module:
-    backbone = vgg16()
+    extractor = vgg16()
     if imagenet_weights:
         state_dict = torch.hub.load_state_dict_from_url(VGG16_WEIGHTS)
-        backbone.load_state_dict(state_dict)
-    backbone.avgpool = AdaptiveAvgPool2d(output_size=(1,1))
-    backbone.classifier = Identity()
+        extractor.load_state_dict(state_dict)
+    extractor.avgpool = AdaptiveAvgPool2d(output_size=(1,1))
+    extractor.classifier = Identity()
     if n_cutoff_layers > 0:
-        backbone = Sequential(*list(backbone.children())[:-(n_cutoff_layers + 1)])
-    return backbone
+        extractor = Sequential(*list(extractor.children())[:-(n_cutoff_layers + 1)])
+    return extractor

@@ -16,7 +16,7 @@ torchvision.disable_beta_transforms_warning()
 
 from src.data.utils import load_data_supervised
 from src.experiments.utils import *
-from src.models.backbones import get_backbone
+from src.models.extractors import get_extractor
 
 cfg = yaml.full_load(open(os.getcwd() + "/config.yml", 'r'))
 if os.path.exists("./wandb.yml"):
@@ -33,6 +33,7 @@ def evaluate_on_dataset(
         n_classes: int,
         loss_fn: Module,
         current_device: Union[int, torch.device],
+        class_thresh: float = 0.5,
         log_step: Optional[int] = None,
         writer: Optional[SummaryWriter] = None,
         use_wandb: bool = False,
@@ -47,6 +48,7 @@ def evaluate_on_dataset(
     :param n_classes: Number of classes
     :param loss_fn: Loss function
     :param current_device: Device for training
+    :param class_thresh: Classification threshold (for binary classification)
     :param log_step: Global training step. If not set, logs as
                      summary text (atemporal).
     :param writer: TensorBoard writer
@@ -68,13 +70,13 @@ def evaluate_on_dataset(
                 y_prob = classifier.forward(x)
                 loss = loss_fn(y_prob, y_true)
             if n_classes == 2:
-                y_pred = torch.greater_equal(y_prob, 0.5).to(torch.int64)
+                y_pred = torch.greater_equal(torch.sigmoid(y_prob), class_thresh).to(torch.int64)
             else:
                 y_pred = torch.argmax(y_prob, 1, keepdim=False)
             all_y_prob = np.concatenate([all_y_prob, y_prob.cpu().numpy()])
             all_y_pred = np.concatenate([all_y_pred, y_pred.cpu().numpy()])
             all_y_true = np.concatenate([all_y_true, y_true.cpu().numpy()])
-            scalars["loss"] += loss
+            scalars["loss"] += loss.item()
         scalars["loss"] /= len(ds)
         scalars.update(
             get_classification_metrics(n_classes, all_y_prob, all_y_pred, all_y_true)
@@ -95,15 +97,18 @@ def train_classifier(
         scheduler: torch.optim.lr_scheduler.LRScheduler,
         checkpoint_path: str,
         writer: SummaryWriter,
-        test_eval: bool = False
+        test_eval: bool = False,
+        class_thresh: float = 0.5,
+        metric_of_interest: str = "val/loss"
 ):
     loss_fn = BCEWithLogitsLoss() if n_classes == 2 else CrossEntropyLoss()
     scaler = torch.cuda.amp.GradScaler()
     log_interval = args["log_interval"]
     batches_per_epoch = len(train_ds)
-    best_val_loss = np.inf
+    best_val_metric = np.inf if "loss" in metric_of_interest else -np.inf
 
     for epoch in range(epochs):
+        classifier.train(True)
         print(f"Epoch {epoch + 1}/{epochs} " + "=" * 50 + "\n")
 
         start_step = epoch * batches_per_epoch
@@ -128,7 +133,7 @@ def train_classifier(
             if global_step % log_interval == 0:
                 scalars = {"loss": loss, "lr_head": optimizer.param_groups[0]['lr'], "epoch": epoch}
                 if n_classes == 2:
-                    y_pred = torch.greater_equal(y_prob, 0.5).to(torch.int64)
+                    y_pred = torch.greater_equal(torch.sigmoid(y_prob), class_thresh).to(torch.int64)
                 else:
                     y_pred = torch.argmax(y_prob, 1, keepdim=False)
                 train_metrics = get_classification_metrics(
@@ -151,6 +156,7 @@ def train_classifier(
                 n_classes,
                 loss_fn,
                 current_device,
+                class_thresh,
                 start_step + epoch_step,
                 writer,
                 use_wandb
@@ -162,10 +168,15 @@ def train_classifier(
             scheduler.step(val_loss)  # Update LR if necessary
 
             # Save checkpoint if validation loss has improved
-            if val_loss < best_val_loss and rank == 0:
-                print(f"Val loss improved from {best_val_loss} to {val_loss}. "
+            old_best_val_metric = best_val_metric
+            best, best_val_metric = check_model_improvement(
+                metric_of_interest,
+                val_metrics[metric_of_interest],
+                best_val_metric
+            )
+            if best and rank == 0:
+                print(f"Val loss improved from {old_best_val_metric} to {best_val_metric}. "
                       f"Updating checkpoint.")
-                best_val_loss = val_loss
                 torch.save(classifier.state_dict(), checkpoint_path)
 
     # Evaluate checkpoint with lowest validation loss on the test set
@@ -178,13 +189,14 @@ def train_classifier(
             n_classes,
             loss_fn,
             current_device,
+            class_thresh,
             None,
             writer,
             use_wandb
         )
-        print(f"Test metrics:")
+        print(f"Test metrics:\n {test_metrics}")
         print(json.dumps(
-            {m: test_metrics[m].numpy() for m in test_metrics},
+            {m: test_metrics[m] for m in test_metrics},
             indent=4)
         )
     else:
@@ -209,22 +221,22 @@ def single_train(run_cfg):
         wandb_run = None
         print("Running experiment offline.")
 
-    # Load backbone weights, if necessary
-    backbone_weights = run_cfg['backbone_weights']
-    backbone_type = run_cfg['backbone_type']
+    # Load extractor weights, if necessary
+    extractor_weights = run_cfg['backbone_weights']
+    extractor_type = run_cfg['backbone_type']
     n_cutoff_layers = run_cfg['n_cutoff_layers']
     freeze_prefix = run_cfg['freeze_prefix']
-    backbone = get_backbone(
-        backbone_type,
-        backbone_weights == 'imagenet',
+    extractor = get_extractor(
+        extractor_type,
+        extractor_weights == 'imagenet',
         n_cutoff_layers
     )
-    if backbone_weights in ['scratch', 'imagenet']:
+    if extractor_weights in ['scratch', 'imagenet']:
         pretrain_method = "fully_supervised"
     else:
-        backbone, pretrain_method = restore_backbone(
-            backbone,
-            backbone_weights,
+        extractor, pretrain_method = restore_extractor(
+            extractor,
+            extractor_weights,
             use_wandb,
             wandb_run,
             freeze_prefix
@@ -288,9 +300,9 @@ def single_train(run_cfg):
     with open(os.path.join(checkpoint_dir, 'run_cfg.json'), 'w') as f:
         json.dump(run_cfg, f)
 
-    # Freeze backbone if using linear eval
+    # Freeze extractor if using linear eval
     if experiment_type in ['linear', 'mlp']:
-        for param in backbone.parameters():
+        for param in extractor.parameters():
             param.requires_grad = False
     if experiment_type == 'mlp':
         fc_nodes = run_cfg['mlp_hidden_layers']
@@ -299,22 +311,22 @@ def single_train(run_cfg):
 
     # Initialize classifier
     n_classes = train_df[label_col].nunique()
-    h_dim = backbone(torch.randn((1,) + img_dim)).shape[-1]
+    h_dim = extractor(torch.randn((1,) + img_dim)).shape[-1]
     head = get_classifier_head(h_dim, fc_nodes, n_classes)
-    classifier = Sequential(backbone, head).cuda()
-    torchsummary.summary(backbone, input_size=(channels, width, height))
+    classifier = Sequential(extractor, head).cuda()
+    torchsummary.summary(extractor, input_size=(channels, width, height))
     torchsummary.summary(head, input_size=(h_dim,))
 
     # Define an optimizer that assigns different learning rates to the
-    # backbone and head.
+    # extractor and head.
     epochs = run_cfg['epochs']
-    lr_backbone = run_cfg['lr_backbone']
+    lr_extractor = run_cfg['lr_backbone']
     lr_head = run_cfg['lr_head']
     weight_decay = run_cfg['weight_decay']
     momentum = run_cfg['momentum']
     param_groups = [dict(params=head.parameters(), lr=lr_head)]
     if experiment_type == "fine-tune":
-        param_groups.append(dict(params=backbone.parameters(), lr=lr_backbone))
+        param_groups.append(dict(params=extractor.parameters(), lr=lr_extractor))
     #optimizer = SGD(param_groups, 0, weight_decay=weight_decay, momentum=momentum)
     optimizer = Adam(param_groups, 0, weight_decay=weight_decay)
     scheduler = ReduceLROnPlateau(optimizer, 'min')
@@ -356,22 +368,22 @@ def kfold_cross_validation(run_cfg):
             wandb_run = None
             print("Running experiment offline.")
 
-        # Load backbone weights, if necessary
-        backbone_weights = run_cfg['backbone_weights']
-        backbone_type = run_cfg['backbone_type']
+        # Load extractor weights, if necessary
+        extractor_weights = run_cfg['backbone_weights']
+        extractor_type = run_cfg['backbone_type']
         n_cutoff_layers = run_cfg['n_cutoff_layers']
         freeze_prefix = run_cfg['freeze_prefix']
-        backbone = get_backbone(
-            backbone_type,
-            backbone_weights == 'imagenet',
+        extractor = get_extractor(
+            extractor_type,
+            extractor_weights == 'imagenet',
             n_cutoff_layers
         )
-        if backbone_weights in ['scratch', 'imagenet']:
+        if extractor_weights in ['scratch', 'imagenet']:
             pretrain_method = "fully_supervised"
         else:
-            backbone, pretrain_method = restore_backbone(
-                backbone,
-                backbone_weights,
+            extractor, pretrain_method = restore_extractor(
+                extractor,
+                extractor_weights,
                 use_wandb,
                 wandb_run,
                 freeze_prefix
@@ -415,7 +427,6 @@ def kfold_cross_validation(run_cfg):
             fold=i,
             k=k
         )
-        run_test = args['test_eval'] == 'Y'
 
         # Define training callbacks
         checkpoint_dir = os.path.join(
@@ -436,9 +447,9 @@ def kfold_cross_validation(run_cfg):
         with open(os.path.join(checkpoint_dir, 'run_cfg.json'), 'w') as f:
             json.dump(run_cfg, f)
 
-        # Freeze backbone if using linear eval
+        # Freeze extractor if using linear eval
         if experiment_type in ['linear', 'mlp']:
-            for param in backbone.parameters():
+            for param in extractor.parameters():
                 param.requires_grad = False
         if experiment_type == 'mlp':
             fc_nodes = run_cfg['mlp_hidden_layers']
@@ -447,23 +458,23 @@ def kfold_cross_validation(run_cfg):
 
         # Initialize classifier
         n_classes = train_df[label_col].nunique()
-        h_dim = backbone(torch.randn((1,) + img_dim)).shape[-1]
+        h_dim = extractor(torch.randn((1,) + img_dim)).shape[-1]
         head = get_classifier_head(h_dim, fc_nodes, n_classes)
-        classifier = Sequential(backbone, head).cuda()
+        classifier = Sequential(extractor, head).cuda()
         if i == 1:
-            torchsummary.summary(backbone, input_size=(channels, width, height))
+            torchsummary.summary(extractor, input_size=(channels, width, height))
             torchsummary.summary(head, input_size=(h_dim,))
 
         # Define an optimizer that assigns different learning rates to the
-        # backbone and head.
+        # extractor and head.
         epochs = run_cfg['epochs']
-        lr_backbone = run_cfg['lr_backbone']
+        lr_extractor = run_cfg['lr_backbone']
         lr_head = run_cfg['lr_head']
         weight_decay = run_cfg['weight_decay']
         momentum = run_cfg['momentum']
         param_groups = [dict(params=head.parameters(), lr=lr_head)]
         if experiment_type == "fine-tune":
-            param_groups.append(dict(params=backbone.parameters(), lr=lr_backbone))
+            param_groups.append(dict(params=extractor.parameters(), lr=lr_extractor))
         optimizer = SGD(param_groups, 0, weight_decay=weight_decay, momentum=momentum)
         scheduler = ReduceLROnPlateau(optimizer, 'min')
 
@@ -481,14 +492,15 @@ def kfold_cross_validation(run_cfg):
             True
         )
         if i == 1:
-            test_metrics = {k: [fold_test_metrics[k]] for k in fold_test_metrics}
+            test_metrics = {m: [fold_test_metrics[m]] for m in fold_test_metrics}
         else:
-            for k in test_metrics:
-                test_metrics[k].append(fold_test_metrics[k])
+            for m in test_metrics:
+                test_metrics[m].append(fold_test_metrics[m])
 
-    for k in test_metrics:
-        test_metrics[f"{k}_mean"] = np.mean(test_metrics[k])
-        test_metrics[f"{k}_std"] = np.std(test_metrics[k])
+    for m in test_metrics:
+        test_metrics[f"{m}_mean"] = np.mean(test_metrics[m])
+        test_metrics[f"{m}_std"] = np.std(test_metrics[m])
+    print(f"Cross-validation results:\n {test_metrics}")
     with open(os.path.join(os.path.dirname(checkpoint_dir), 'kfold_results.json'), 'w') as f:
         json.dump(test_metrics, f)
 
@@ -503,7 +515,7 @@ if __name__ == '__main__':
     parser.add_argument('--redownload_data', required=False, type=str, default="N", help='Redownload image data from wandb')
     parser.add_argument('--task', required=False, type=str,
                         help='Downstream task ID. One of {"lung_sliding", "view" "ab_lines", "pe"')
-    parser.add_argument('--backbone_weights', required=False, type=str,
+    parser.add_argument('--extractor_weights', required=False, type=str,
                         help='Wandb artefact ID, path to .pth checkpoint, or "scratch"')
     parser.add_argument('--world_size', default=1, type=int, help='Number of distributed processes')
     parser.add_argument('--dist_url', default="localhost", type=str, help='URL used to set up distributed training')
@@ -542,6 +554,8 @@ if __name__ == '__main__':
         single_train(run_cfg)
     elif args['train'] == 'cross_validation':
         kfold_cross_validation(run_cfg)
+    else:
+        raise NotImplementedError(f"No training run type named {args['train']}")
 
     if use_wandb:
         wandb.finish()

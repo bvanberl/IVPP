@@ -59,7 +59,7 @@ def prepare_bmode_pretrain_dataset(
         augment_pipeline: str = "bmode_baseline",
         shuffle: bool = False,
         channels: int = 1,
-        n_workers: int = 10,
+        n_workers: int = 0,
         world_size: int = 1,
         **preprocess_kwargs
 ) -> DataLoader:
@@ -132,7 +132,7 @@ def get_video_dataset_from_frames(
         frames_df: pd.DataFrame,
         clips_df: pd.DataFrame,
         clip_columns: List[str],
-        rep_by_length: bool = True
+        rep_by_length: bool = False
 ) -> pd.DataFrame:
     """
     Condenses frames records to clip records, including the path to the folders
@@ -184,7 +184,7 @@ def load_data_for_pretrain(
         height: int = 224,
         us_mode: str = "bmode",
         world_size: int = 1,
-        n_workers: int = 10,
+        n_workers: int = 0,
         **preprocess_kwargs
 ) -> (DataLoader, pd.DataFrame):
     """
@@ -433,7 +433,7 @@ def load_data_supervised(cfg: dict,
         test_frames_df = test_frames_df.loc[test_frames_df[label_col] != -1]
     else:
         test_frames_df = pd.read_csv(os.path.join(splits_dir, f'fold{fold}_frames.csv'))
-        val_frames_df = test_frames_df #pd.DataFrame(columns=test_frames_df.columns)    # Empty validation set
+        val_frames_df = test_frames_df
         train_frames_df = pd.DataFrame(columns=test_frames_df.columns)
         for i in range(1, k + 1):
             if i != fold:
@@ -451,7 +451,8 @@ def load_data_supervised(cfg: dict,
         augment_pipeline="supervised",
         shuffle=True,
         channels=channels,
-        n_classes=n_classes
+        n_classes=n_classes,
+        n_workers=3
     )
     val_set = prepare_labelled_dataset(
         val_frames_df,
@@ -463,7 +464,8 @@ def load_data_supervised(cfg: dict,
         augment_pipeline="none",
         shuffle=False,
         channels=channels,
-        n_classes=n_classes
+        n_classes=n_classes,
+        n_workers=3
     ) if not val_frames_df.empty else None
     test_set = prepare_labelled_dataset(
         test_frames_df,

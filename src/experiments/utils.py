@@ -72,8 +72,8 @@ def init_distributed_mode(
     return gpu, rank
 
 
-def restore_backbone(
-        backbone: Module,
+def restore_extractor(
+        extractor: Module,
         checkpoint: str,
         use_wandb: bool = False,
         wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None,
@@ -83,7 +83,7 @@ def restore_backbone(
 
     Loads the weights of a serialized feature extractor. Also returns
     an identifier for the method used to pretraing it.
-    :param backbone: Model backbone
+    :param extractor: Model extractor
     :param checkpoint: Location of model weights (path or artifact ID)
     :param use_wandb: If True, wandb experiment tracking is in use
     :param wandb_run: Current wandb run
@@ -92,19 +92,20 @@ def restore_backbone(
     if os.path.exists(checkpoint):
         checkpoint_path = checkpoint
     elif use_wandb:
-        backbone_artifact = checkpoint
-        checkpoint_path = wandb_run.use_artifact(backbone_artifact).download()
+        extractor_artifact = checkpoint
+        checkpoint_path = wandb_run.use_artifact(extractor_artifact).download()
     else:
         raise ValueError(f"Ensure that either {checkpoint} is a valid .pth path"
                          f"or that it is a valid artefact ID and that wandb is enabled.")
     state_dict = torch.load(checkpoint_path)
-    backbone.load_state_dict(state_dict["backbone"])
+    extractor_key = "extractor" if "extractor" in state_dict else "backbone"
+    extractor.load_state_dict(state_dict[extractor_key])
     if freeze_prefix:
-        for name, param in backbone.named_parameters():
+        for name, param in extractor.named_parameters():
             if not name.startswith(freeze_prefix):
                 param.requires_grad = False
     pretrain_method = state_dict["pretrain_method"]
-    return backbone, pretrain_method
+    return extractor, pretrain_method
 
 def normal_init_linear(
         in_dim: int,
@@ -196,3 +197,18 @@ def get_classification_metrics(
     metrics["accuracy"] = accuracy_score(y_true, y_pred)
     return metrics
 
+def check_model_improvement(metric_name, cur_metric_value, prev_best_metric_value):
+    """
+    Checks to see if the model has improved on the metric of interest, given the
+    best previously recorded value for that metric.
+    :param metric_name: The metric of interest
+    :param cur_metric_value: The current value of the metric of interest
+    :param prev_best_metric_value: The best value of the metric of interest
+        observed so far.
+    :return: (True if new value is better, Best value for metric of interest)
+    """
+    if ("loss" in metric_name and cur_metric_value < prev_best_metric_value) or \
+            ("loss" not in metric_name and cur_metric_value > prev_best_metric_value):
+        return True, cur_metric_value
+    else:
+        return False, prev_best_metric_value

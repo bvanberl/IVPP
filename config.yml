@@ -1,6 +1,6 @@
 PATHS:
-  IMAGES: "data/bmodes"
-  SPLITS: "splits/bmodes_splits"
+  IMAGES: "B:/Datasets/LUS_SSL/covid_5_fold/data"
+  SPLITS: "B:/Datasets/LUS_SSL/covid_5_fold/splits"
   MODEL_WEIGHTS: "results/models"
 
 DATA:
@@ -16,9 +16,9 @@ PRETRAIN:
   BATCH_SIZE: 512
   OPTIMIZER: 'lars'
   INIT_LR: 0.2
-  WARMUP_EPOCHS: 3
+  WARMUP_EPOCHS: 30
   WEIGHT_DECAY: 0.000001
-  BACKBONE: 'resnet14'
+  EXTRACTOR: 'resnet14'
   PROJ_NODES: [512, 512]
   USE_BIAS: False
   IMAGENET_WEIGHTS: True
@@ -29,10 +29,6 @@ PRETRAIN:
   HPARAMS:
     SIMCLR:
       TEMPERATURE: 0.1
-    USCL:
-      TEMPERATURE: 0.5
-      ALPHA: 0.5
-      BETA: 0.5
     BARLOW_TWINS:
       LAMBDA_: 0.005
     VICREG:
@@ -43,7 +39,7 @@ PRETRAIN:
       LAMBDA_: 50.0
       MU: 25.0
       NU: 1.0
-      MAX_TIME_DELTA: 1.0
+      MAX_TIME_DELTA: 2.0
       SAMPLE_WEIGHTS: True
     NCUS_BARLOW_TWINS:
       LAMBDA_: 0.005
@@ -61,13 +57,13 @@ TRAIN:
   BACKBONE_TYPE: 'resnet14'
   LABEL: 'label'
   PROP_TRAIN: 1.0
-  BACKBONE_WEIGHTS: 'results/models/pretrained/ncus_vicreg/bmode20231013-butte/best_model.pth' #'imagenet'
-  BATCH_SIZE: 32
+  BACKBONE_WEIGHTS: 'results/models/pretrained/ncus_vicreg/bmode20231025-182546/final_model.pth' #'imagenet'
+  BATCH_SIZE: 128
   N_CUTOFF_LAYERS: 0
-  EPOCHS: 100
-  LR_BACKBONE: 0.01 #0.0001
-  LR_HEAD: 0.01 #0.02
+  EPOCHS: 40
+  LR_BACKBONE: 0.001
+  LR_HEAD: 0.01
   MOMENTUM: 0.9
   WEIGHT_DECAY: 0.0001
   MLP_HIDDEN_LAYERS: [32]
-  FREEZE_PREFIX: "layer3"
+  FREEZE_PREFIX: null #"layer3"

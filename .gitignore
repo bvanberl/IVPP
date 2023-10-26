@@ -9,6 +9,7 @@ results/
 artifacts/
 *.sh
 outfiles/
+*.ipynb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

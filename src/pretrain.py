@@ -33,7 +33,7 @@ if __name__ == '__main__':
     parser.add_argument('--dist_url', default="localhost", type=str, help='URL used to set up distributed training')
     parser.add_argument('--dist_backend', default='gloo', type=str, help='Backend for distributed package')
     parser.add_argument('--log_interval', default=20, type=int, help='Number of steps after which to log')
-    parser.add_argument('--num_workers', required=False, default=6, type=int, help='Number of processes for loading data')
+    parser.add_argument('--num_workers', required=False, default=0, type=int, help='Number of processes for loading data')
     args = vars(parser.parse_args())
     print(f"Args: {args}")
 
@@ -87,7 +87,7 @@ if __name__ == '__main__':
     n_examples = train_df.shape[0]
     batches_per_epoch = len(train_ds)
     img_dim = (batch_size, channels, height, width)
-    backbone_name = cfg['PRETRAIN']['BACKBONE']
+    extractor_name = cfg['PRETRAIN']['EXTRACTOR']
     use_bias = cfg['PRETRAIN']['USE_BIAS']
     proj_nodes = cfg['PRETRAIN']['PROJ_NODES']
     n_cutoff_layers = cfg['PRETRAIN']['N_CUTOFF_LAYERS']
@@ -131,18 +131,16 @@ if __name__ == '__main__':
 
     model = JointEmbeddingModel(
         img_dim,
-        backbone_name,
+        extractor_name,
         use_imagenet,
         proj_nodes,
-        backbone_cutoff_layers=n_cutoff_layers,
+        extractor_cutoff_layers=n_cutoff_layers,
         projector_bias=use_bias
     ).cuda()
-    # print(model.backbone)
-    # print(model.projector)
     if world_size > 1:
         model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[current_device])
-    torchsummary.summary(model.backbone, input_size=(channels, width, height))
+    torchsummary.summary(model.extractor, input_size=(channels, width, height))
     torchsummary.summary(model.projector, input_size=(model.h_dim,))
 
     epochs = cfg['PRETRAIN']['EPOCHS']
@@ -187,6 +185,7 @@ if __name__ == '__main__':
 
 
     for epoch in range(epochs):
+        model.train(True)
         print(f"Epoch {epoch + 1}/{epochs} " + "=" * 30 + "\n")
         if world_size > 1:
             train_ds.sampler.set_epoch(epoch)
@@ -226,12 +225,15 @@ if __name__ == '__main__':
         if val_ds:
             if world_size > 1:
                 dist.barrier()
-            model = model.to('cpu')
+            #model = model.to('cpu')
             model.eval()
             with torch.no_grad():
                 val_scalars = {"loss": 0.}
                 val_scalars.update({m: 0. for m in loss_fn.get_instance_vars()})
                 for val_step, (x1, x2, sw) in enumerate(val_ds, start=0):
+                    x1 = x1.cuda()
+                    x2 = x2.cuda()
+                    sw = sw.cuda()
 
                     optimizer.zero_grad()
                     with torch.cuda.amp.autocast():
@@ -261,7 +263,7 @@ if __name__ == '__main__':
             pretrain_state = dict(
                 epoch=epoch + 1,
                 model=model.state_dict(),
-                backbone=model.backbone.state_dict(),
+                extractor=model.extractor.state_dict(),
                 optimizer=optimizer.state_dict(),
                 loss_fn=loss_fn.state_dict(),
                 pretrain_method=method

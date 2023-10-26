@@ -14,7 +14,7 @@ import torchvision
 torchvision.disable_beta_transforms_warning()
 
 from src.data.utils import prepare_labelled_dataset
-from src.models.backbones import get_backbone
+from src.models.extractors import get_backbone
 from src.experiments.utils import restore_backbone
 
 def get_features(
