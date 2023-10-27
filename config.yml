@@ -1,0 +1,69 @@
+PATHS:
+  IMAGES: "bmodes1_internal/data"
+  SPLITS: "bmodes1_internal/splits"
+  MODEL_WEIGHTS: "results/models"
+
+DATA:
+  HEIGHT: 224
+  WIDTH: 224
+  MIN_PIXEL_VALUE: 0.0
+  MAX_PIXEL_VALUE: 255.0
+  NUM_CHANNELS: 3
+
+PRETRAIN:
+  SEED: 11
+  EPOCHS: 300
+  BATCH_SIZE: 512
+  OPTIMIZER: 'lars'
+  INIT_LR: 0.2
+  WARMUP_EPOCHS: 30
+  WEIGHT_DECAY: 0.000001
+  EXTRACTOR: 'resnet18'
+  PROJ_NODES: [512, 512]
+  USE_BIAS: False
+  IMAGENET_WEIGHTS: True
+  USE_UNLABELLED: True
+  METHOD: "ncus_vicreg"
+  AUGMENT_PIPELINE: "bmode_baseline"
+  N_CUTOFF_LAYERS: 0
+  HPARAMS:
+    SIMCLR:
+      TEMPERATURE: 0.1
+    BARLOW_TWINS:
+      LAMBDA_: 0.005
+    VICREG:
+      LAMBDA_: 25.0
+      MU: 25.0
+      NU: 1.0
+    NCUS_VICREG:
+      LAMBDA_: 25.0
+      MU: 25.0
+      NU: 1.0
+      MAX_TIME_DELTA: 2.0
+      SAMPLE_WEIGHTS: False
+    NCUS_BARLOW_TWINS:
+      LAMBDA_: 0.005
+      MAX_TIME_DELTA: 3
+      SAMPLE_WEIGHTS: False
+    NCUS_SIMCLR:
+      TEMPERATURE: 0.5
+      MAX_TIME_DELTA: 1.0
+      SAMPLE_WEIGHTS: True
+
+TRAIN:
+  EXPERIMENT: 'linear'
+  FOLDS: 5
+  SEED: 1
+  BACKBONE_TYPE: 'resnet14'
+  LABEL: 'ab_lines_label'
+  PROP_TRAIN: 1.0
+  BACKBONE_WEIGHTS: 'results/models/pretrained/ncus_vicreg/bmode20231025-182546/final_model.pth' #'imagenet'
+  BATCH_SIZE: 512
+  N_CUTOFF_LAYERS: 0
+  EPOCHS: 40
+  LR_BACKBONE: 0.001
+  LR_HEAD: 0.01
+  MOMENTUM: 0.9
+  WEIGHT_DECAY: 0.0001
+  MLP_HIDDEN_LAYERS: [32]
+  FREEZE_PREFIX: null #"layer3"
