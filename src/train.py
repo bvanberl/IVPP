@@ -70,7 +70,7 @@ def evaluate_on_dataset(
                 y_prob = classifier.forward(x)
                 loss = loss_fn(y_prob, y_true)
             if n_classes == 2:
-                y_pred = torch.greater_equal(torch.sigmoid(y_prob), class_thresh).to(torch.int64)
+                y_pred = torch.greater_equal(torch.sigmoid(y_prob), class_thresh).to(torch.int64).squeeze()
             else:
                 y_pred = torch.argmax(y_prob, 1, keepdim=False)
             all_y_prob = np.concatenate([all_y_prob, y_prob.cpu().numpy()])

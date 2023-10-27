@@ -33,7 +33,7 @@ class ImagePretrainDataset(Dataset):
     def __len__(self):
         return self.cardinality
 
-    def __getitem__(self, idx: int):
+    def __getitem__(self, idx):
 
         # Load and copy image
         image_path = self.image_paths[idx]
@@ -77,7 +77,7 @@ class ImageClassificationDataset(Dataset):
     def __len__(self):
         return self.cardinality
 
-    def __getitem__(self, idx: int):
+    def __getitem__(self, idx):
 
         # Load image
         image_path = os.path.join(

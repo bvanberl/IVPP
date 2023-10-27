@@ -122,7 +122,7 @@ def prepare_bmode_pretrain_dataset(
         batch_size=device_batch_size,
         shuffle=shuffle,
         num_workers=n_workers,
-        pin_memory=True,
+        pin_memory=False,
         sampler=sampler
     )
     return data_loader
@@ -280,7 +280,7 @@ def load_data_for_pretrain(
                 shuffle=False,
                 channels=channels,
                 distributed=False,
-                n_workers=0,
+                n_workers=n_workers,
                 **preprocess_kwargs
             )
         else:
@@ -452,7 +452,7 @@ def load_data_supervised(cfg: dict,
         shuffle=True,
         channels=channels,
         n_classes=n_classes,
-        n_workers=3
+        n_workers=0
     )
     val_set = prepare_labelled_dataset(
         val_frames_df,
@@ -465,7 +465,7 @@ def load_data_supervised(cfg: dict,
         shuffle=False,
         channels=channels,
         n_classes=n_classes,
-        n_workers=3
+        n_workers=0
     ) if not val_frames_df.empty else None
     test_set = prepare_labelled_dataset(
         test_frames_df,

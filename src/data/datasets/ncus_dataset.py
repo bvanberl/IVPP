@@ -38,7 +38,7 @@ class NCUSDataset(Dataset):
     def __len__(self):
         return self.cardinality
 
-    def __getitem__(self, idx: int):
+    def __getitem__(self, idx):
         video_dir = self.video_dirs[idx]
         n_frames = self.img_counts[idx]
         fps = self.fps[idx]
@@ -58,13 +58,10 @@ class NCUSDataset(Dataset):
         x2 = cv2.imread(x2_path, self.img_read_flag)
 
         # Apply data augmentation transforms
-        try:
-            if self.transforms1:
-                x1 = self.transforms1(x1)
-            if self.transforms2:
-                x2 = self.transforms2(x2)
-        except Exception as e:
-            print(e)
+        if self.transforms1:
+            x1 = self.transforms1(x1)
+        if self.transforms2:
+            x2 = self.transforms2(x2)
 
         # Determine sample weight according to distance between images
         if self.sample_weights:

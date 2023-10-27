@@ -1,6 +1,6 @@
 PATHS:
-  IMAGES: "B:/Datasets/LUS_SSL/covid_5_fold/data"
-  SPLITS: "B:/Datasets/LUS_SSL/covid_5_fold/splits"
+  IMAGES: "bmodes1_internal/data"
+  SPLITS: "bmodes1_internal/splits"
   MODEL_WEIGHTS: "results/models"
 
 DATA:
@@ -18,7 +18,7 @@ PRETRAIN:
   INIT_LR: 0.2
   WARMUP_EPOCHS: 30
   WEIGHT_DECAY: 0.000001
-  EXTRACTOR: 'resnet14'
+  EXTRACTOR: 'resnet18'
   PROJ_NODES: [512, 512]
   USE_BIAS: False
   IMAGENET_WEIGHTS: True
@@ -36,11 +36,11 @@ PRETRAIN:
       MU: 25.0
       NU: 1.0
     NCUS_VICREG:
-      LAMBDA_: 50.0
+      LAMBDA_: 25.0
       MU: 25.0
       NU: 1.0
       MAX_TIME_DELTA: 2.0
-      SAMPLE_WEIGHTS: True
+      SAMPLE_WEIGHTS: False
     NCUS_BARLOW_TWINS:
       LAMBDA_: 0.005
       MAX_TIME_DELTA: 3
@@ -51,14 +51,14 @@ PRETRAIN:
       SAMPLE_WEIGHTS: True
 
 TRAIN:
-  EXPERIMENT: 'fine-tune'
+  EXPERIMENT: 'linear'
   FOLDS: 5
   SEED: 1
   BACKBONE_TYPE: 'resnet14'
-  LABEL: 'label'
+  LABEL: 'ab_lines_label'
   PROP_TRAIN: 1.0
   BACKBONE_WEIGHTS: 'results/models/pretrained/ncus_vicreg/bmode20231025-182546/final_model.pth' #'imagenet'
-  BATCH_SIZE: 128
+  BATCH_SIZE: 512
   N_CUTOFF_LAYERS: 0
   EPOCHS: 40
   LR_BACKBONE: 0.001
