@@ -77,7 +77,7 @@ def restore_extractor(
         checkpoint: str,
         use_wandb: bool = False,
         wandb_run: Optional[wandb.wandb_sdk.wandb_run.Run] = None,
-        freeze_prefix: str = None
+        freeze_prefix: Union[str, List[str]] = None
 ) -> (Module, str):
     """Restores a serialized feature extractor's weights
 
@@ -87,6 +87,7 @@ def restore_extractor(
     :param checkpoint: Location of model weights (path or artifact ID)
     :param use_wandb: If True, wandb experiment tracking is in use
     :param wandb_run: Current wandb run
+    :param freeze_prefix: Prefixes for layers to be frozen
     :return: Restored feature extractor, pretraining method
     """
     if os.path.exists(checkpoint):
@@ -102,7 +103,7 @@ def restore_extractor(
     extractor.load_state_dict(state_dict[extractor_key])
     if freeze_prefix:
         for name, param in extractor.named_parameters():
-            if not name.startswith(freeze_prefix):
+            if any(name.startswith(prefix) for prefix in freeze_prefix):
                 param.requires_grad = False
     pretrain_method = state_dict["pretrain_method"]
     return extractor, pretrain_method

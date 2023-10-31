@@ -159,7 +159,7 @@ def get_video_dataset_from_frames(
             agg_dict.update({
                 c: "first"
             })
-    frames_df["clip_dir"] = frames_df["filepath"].apply(lambda path: os.path.dirname(path))
+    frames_df["clip_dir"] = frames_df["filepath"].apply(lambda path: "/".join(path.split("\\")[:-1]))
     new_video_df = frames_df.groupby("id").agg(agg_dict).reset_index()
     new_video_df.rename(columns={"filepath": "n_frames"}, inplace=True)
     new_video_df = new_video_df.merge(clips_df[["id"] + clip_columns], how="left", on="id")
@@ -330,8 +330,10 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
     else:
         print(f"No label column named {label_col}. Setting labels to 0.")
         labels = np.zeros(image_df.shape[0], dtype=float)
-    if augment_pipeline == "supervised":
+    if augment_pipeline == "supervised_bmode":
         transforms = get_supervised_bmode_augmentions(height, width, **preprocess_kwargs)
+    elif augment_pipeline == "supervised_uscl":
+        transforms = get_uscl_supervised_augmentions(height, width, **preprocess_kwargs)
     else:
         if augment_pipeline != "none":
             logging.warning(f"Unrecognized augmentation pipeline: {augment_pipeline}.\n"
@@ -371,6 +373,8 @@ def load_data_supervised(cfg: dict,
                          label_col: str,
                          data_artifact_name: str,
                          splits_artifact_name: str,
+                         image_dir: str = None,
+                         splits_dir: str = None,
                          run: wandb.sdk.wandb_run.Run = None,
                          data_version: str = 'latest',
                          splits_version: str = 'latest',
@@ -379,13 +383,17 @@ def load_data_supervised(cfg: dict,
                          height: int = 224,
                          width: int = 224,
                          channels: int = 1,
+                         augment_pipeline: str = "supervised_bmode",
                          seed: int = 0,
+                         n_workers: int = 0,
                          fold: Optional[int] = None,
                          k: Optional[int] = None,
     ) -> (DataLoader, DataLoader, DataLoader, pd.DataFrame, pd.DataFrame, pd.DataFrame):
     '''
     Retrieve data, data splits, and returns an iterable preprocessed dataset for supervised learning experiments
     :param cfg: The config.yaml file dictionary
+    :param image_dir: Images directory
+    :param splits_dir: Directory containing CSVs for each data split
     :param batch_size: Batch size for datasets
     :param label_col: The column in the images DataFrame corresponding to the label for the downstream task
     :param run: The wandb run object that is initialized
@@ -400,6 +408,7 @@ def load_data_supervised(cfg: dict,
     :param channels: Number of channels
     :param oversample_minority: True if the minority class is upsampled to balance class distribution, False otherwise
     :param seed: Random state that ensures replicable training set shuffling prior to taking `percent_train` of it
+    :param n_workers: Number of workers for data loading
     :param fold: Test set fold identifier. Only set if executing k-fold cross validation.
     :param k: Total number of folds if executing k-fold cross validation.
     :return: (training set, validation set, test set, training set table, validation set table, test set table, )
@@ -412,8 +421,8 @@ def load_data_supervised(cfg: dict,
         data_dir = data.download(os.path.join(cfg['WANDB']['LOCAL_DATA_DIR'], data_artifact_name))
         splits_dir = splits.download(os.path.join(cfg['WANDB']['LOCAL_DATA_DIR'], 'splits'))
     else:
-        data_dir = cfg["PATHS"]["IMAGES"]
-        splits_dir = cfg["PATHS"]["SPLITS"]
+        data_dir = image_dir
+        splits_dir = splits_dir
 
     if fold is None:
         train_frames_df = pd.read_csv(os.path.join(splits_dir, 'train_set_frames.csv'))
@@ -448,11 +457,11 @@ def load_data_supervised(cfg: dict,
         width,
         batch_size,
         label_col,
-        augment_pipeline="supervised",
+        augment_pipeline=augment_pipeline,
         shuffle=True,
         channels=channels,
         n_classes=n_classes,
-        n_workers=0
+        n_workers=n_workers
     )
     val_set = prepare_labelled_dataset(
         val_frames_df,
@@ -465,7 +474,7 @@ def load_data_supervised(cfg: dict,
         shuffle=False,
         channels=channels,
         n_classes=n_classes,
-        n_workers=0
+        n_workers=n_workers
     ) if not val_frames_df.empty else None
     test_set = prepare_labelled_dataset(
         test_frames_df,

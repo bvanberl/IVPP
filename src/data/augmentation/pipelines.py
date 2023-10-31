@@ -81,6 +81,32 @@ def get_supervised_bmode_augmentions(
         get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
 
+def get_uscl_supervised_augmentations(
+    height: int,
+    width: int,
+    mean_pixel_val: List[float] = None,
+    std_pixel_val: List[float] = None,  
+):
+    """Defines augmentation pipeline for supervised learning experiments.
+
+    Same pipeline as used in USCL: https://arxiv.org/pdf/2011.13066.pdf
+    :param height: Image height
+    :param width: Image width
+    :param brightness_delta: Maximum brightness increase/decrease, in [0, 1]
+    :param contrast_low: Lower bound for contrast transformation
+    :param contrast_high: Upper bound for contrast transformation
+    :param mean_pixel_val: Channel-wise means
+    :param std_pixel_val: Channel-wise standard deviation
+    :return: Callable augmentation pipeline
+    """
+    return v2.Compose([
+        v2.Resize((height, width)),
+        v2.RandomResizedCrop((height, width), scale=(0.8, 1.0), ratio=(0.8, 1.25)),
+        v2.RandomHorizontalFlip(p=0.5),
+        ToTensor(),
+        get_normalize_transform(mean_pixel_val, std_pixel_val)
+    ])
+
 def get_byol_augmentations(
         height: int,
         width: int,

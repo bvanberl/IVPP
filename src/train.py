@@ -8,7 +8,7 @@ import numpy as np
 import torch.optim
 import yaml
 from torch.optim import SGD, Adam
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
 from torch.nn import CrossEntropyLoss, BCEWithLogitsLoss
 import torchsummary
 import torchvision
@@ -99,7 +99,7 @@ def train_classifier(
         writer: SummaryWriter,
         test_eval: bool = False,
         class_thresh: float = 0.5,
-        metric_of_interest: str = "val/loss"
+        metric_of_interest: str = "loss"
 ):
     loss_fn = BCEWithLogitsLoss() if n_classes == 2 else CrossEntropyLoss()
     scaler = torch.cuda.amp.GradScaler()
@@ -222,8 +222,8 @@ def single_train(run_cfg):
         print("Running experiment offline.")
 
     # Load extractor weights, if necessary
-    extractor_weights = run_cfg['backbone_weights']
-    extractor_type = run_cfg['backbone_type']
+    extractor_weights = run_cfg['extractor_weights']
+    extractor_type = run_cfg['extractor_type']
     n_cutoff_layers = run_cfg['n_cutoff_layers']
     freeze_prefix = run_cfg['freeze_prefix']
     extractor = get_extractor(
@@ -257,8 +257,10 @@ def single_train(run_cfg):
     batch_size = run_cfg['batch_size']
     height = run_cfg['height']
     width = run_cfg['width']
+    augment_pipeline = run_cfg['augment_pipeline']
     img_dim = (channels, height, width)
     run_cfg['img_dim'] = img_dim
+    n_workers = run_cfg["num_workers"]
     print(f"Run config:\n {run_cfg}")
 
     # Prepare training, validation, and test sets.
@@ -268,6 +270,8 @@ def single_train(run_cfg):
         label_col,
         data_artifact,
         splits_artifact,
+        image_dir=run_cfg['image_dir'],
+        splits_dir=run_cfg['splits_dir'],
         run=wandb_run,
         data_version=data_version,
         splits_version=splits_version,
@@ -276,6 +280,8 @@ def single_train(run_cfg):
         height=height,
         width=width,
         channels=channels,
+        augment_pipeline=augment_pipeline,
+        n_workers=n_workers,
         seed=seed
     )
     run_test = args['test_eval'] == 'Y'
@@ -291,6 +297,7 @@ def single_train(run_cfg):
     )
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)
+    print(f"Checkpoint Dir: {checkpoint_dir}")
     checkpoint_path = os.path.join(checkpoint_dir, "checkpoint.pth")
     log_dir = os.path.join(checkpoint_dir, "logs")
     os.makedirs(log_dir)
@@ -320,16 +327,20 @@ def single_train(run_cfg):
     # Define an optimizer that assigns different learning rates to the
     # extractor and head.
     epochs = run_cfg['epochs']
-    lr_extractor = run_cfg['lr_backbone']
+    lr_extractor = run_cfg['lr_extractor']
     lr_head = run_cfg['lr_head']
     weight_decay = run_cfg['weight_decay']
     momentum = run_cfg['momentum']
     param_groups = [dict(params=head.parameters(), lr=lr_head)]
     if experiment_type == "fine-tune":
         param_groups.append(dict(params=extractor.parameters(), lr=lr_extractor))
-    #optimizer = SGD(param_groups, 0, weight_decay=weight_decay, momentum=momentum)
-    optimizer = Adam(param_groups, 0, weight_decay=weight_decay)
-    scheduler = ReduceLROnPlateau(optimizer, 'min')
+    if run_cfg['optimizer'] == "adam":
+        optimizer = Adam(param_groups, 0, weight_decay=weight_decay)
+    elif run_cfg['optimizer'] == "sgd":
+        optimizer = SGD(param_groups, 0, weight_decay=weight_decay, momentum=momentum)
+    else:
+        raise ValueError(f"{run_cfg['optimizer']} is an unsupported optimizer.")
+    scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=0, last_epoch=-1) 
 
     train_classifier(
         classifier,
@@ -369,8 +380,8 @@ def kfold_cross_validation(run_cfg):
             print("Running experiment offline.")
 
         # Load extractor weights, if necessary
-        extractor_weights = run_cfg['backbone_weights']
-        extractor_type = run_cfg['backbone_type']
+        extractor_weights = run_cfg['extractor_weights']
+        extractor_type = run_cfg['extractor_type']
         n_cutoff_layers = run_cfg['n_cutoff_layers']
         freeze_prefix = run_cfg['freeze_prefix']
         extractor = get_extractor(
@@ -405,7 +416,9 @@ def kfold_cross_validation(run_cfg):
         height = run_cfg['height']
         width = run_cfg['width']
         img_dim = (channels, height, width)
+        augment_pipeline = run_cfg['augment_pipeline']
         run_cfg['img_dim'] = img_dim
+        n_workers = run_cfg["num_workers"]
         print(f"Run config:\n {run_cfg}")
 
         # Prepare training, validation, and test sets.
@@ -415,6 +428,8 @@ def kfold_cross_validation(run_cfg):
             label_col,
             data_artifact,
             splits_artifact,
+            image_dir=run_cfg['image_dir'],
+            splits_dir=run_cfg['splits_dir'],
             run=wandb_run,
             data_version=data_version,
             splits_version=splits_version,
@@ -423,6 +438,8 @@ def kfold_cross_validation(run_cfg):
             height=height,
             width=width,
             channels=channels,
+            augment_pipeline=augment_pipeline,
+            n_workers=n_workers,
             seed=seed,
             fold=i,
             k=k
@@ -468,15 +485,20 @@ def kfold_cross_validation(run_cfg):
         # Define an optimizer that assigns different learning rates to the
         # extractor and head.
         epochs = run_cfg['epochs']
-        lr_extractor = run_cfg['lr_backbone']
+        lr_extractor = run_cfg['lr_extractor']
         lr_head = run_cfg['lr_head']
         weight_decay = run_cfg['weight_decay']
         momentum = run_cfg['momentum']
         param_groups = [dict(params=head.parameters(), lr=lr_head)]
         if experiment_type == "fine-tune":
             param_groups.append(dict(params=extractor.parameters(), lr=lr_extractor))
-        optimizer = SGD(param_groups, 0, weight_decay=weight_decay, momentum=momentum)
-        scheduler = ReduceLROnPlateau(optimizer, 'min')
+        if run_cfg['optimizer'] == "adam":
+            optimizer = Adam(param_groups, 0, weight_decay=weight_decay)
+        elif run_cfg['optimizer'] == "sgd":
+            optimizer = SGD(param_groups, 0, weight_decay=weight_decay, momentum=momentum)
+        else:
+            raise ValueError(f"{run_cfg['optimizer']} is an unsupported optimizer.")
+        scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=0, last_epoch=-1) 
 
         fold_test_metrics = train_classifier(
             classifier,
@@ -497,7 +519,8 @@ def kfold_cross_validation(run_cfg):
             for m in test_metrics:
                 test_metrics[m].append(fold_test_metrics[m])
 
-    for m in test_metrics:
+    metric_names = list(test_metrics.keys())
+    for m in metric_names:
         test_metrics[f"{m}_mean"] = np.mean(test_metrics[m])
         test_metrics[f"{m}_std"] = np.std(test_metrics[m])
     print(f"Cross-validation results:\n {test_metrics}")
@@ -508,10 +531,10 @@ def kfold_cross_validation(run_cfg):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('--experiment', required=False, default='', type=str, help='Type of training experiment')
-    parser.add_argument('--train', required=False, default='single', type=str, help='"single" or "cross_validation"')
-    parser.add_argument('--image_dir', required=False, default='', type=str, help='Root directory containing images')
-    parser.add_argument('--splits_dir', required=False, default='', type=str, help='Root directory containing splits information')
+    parser.add_argument('--experiment', required=False, type=str, help='Type of training experiment')
+    parser.add_argument('--train', required=False, type=str, default="single", help='"single" or "cross_validation"')
+    parser.add_argument('--image_dir', required=False, type=str, help='Root directory containing images')
+    parser.add_argument('--splits_dir', required=False, type=str, help='Root directory containing splits information')
     parser.add_argument('--redownload_data', required=False, type=str, default="N", help='Redownload image data from wandb')
     parser.add_argument('--task', required=False, type=str,
                         help='Downstream task ID. One of {"lung_sliding", "view" "ab_lines", "pe"')
@@ -520,9 +543,11 @@ if __name__ == '__main__':
     parser.add_argument('--world_size', default=1, type=int, help='Number of distributed processes')
     parser.add_argument('--dist_url', default="localhost", type=str, help='URL used to set up distributed training')
     parser.add_argument('--dist_backend', default='gloo', type=str, help='Backend for distributed package')
-    parser.add_argument('--dist_port', default='12355', type=str, help='Backend for distributed package')
     parser.add_argument('--log_interval', default=20, type=int, help='Number of steps after which to log')
     parser.add_argument('--test_eval', required=False, type=str, default='N', help='Evaluate on test set')
+    parser.add_argument('--augment_pipeline', required=False, type=str, default="supervised_bmode", help='Augmentation pipeline')
+    parser.add_argument('--label', required=False, type=str, default="label", help='Label column name')
+    parser.add_argument('--num_workers', required=False, type=int, default=0, help='Number of workers for data loading')
     parser.add_argument('--seed', required=False, type=int, help='Random seed')
     args = vars(parser.parse_args())
 
@@ -538,13 +563,16 @@ if __name__ == '__main__':
         torch.cuda.set_device(current_device)
 
     # Set up configuration for this run
+    print(args)
     run_cfg = {k.lower(): v for k, v in cfg['TRAIN'].items()}
     run_cfg.update({k.lower(): v for k, v in cfg['DATA'].items()})
-    if args['experiment']:
-        run_cfg['experiment'] = args['experiment'].lower()
-    for arg in args:
-        if args[arg]:
-            run_cfg[arg] = args[arg]
+    run_cfg.update({k: args[k] for k in args if args[k] is not None})
+    print(f"RUN CONFIG:\n {run_cfg}")
+    # if args['experiment']:
+    #     run_cfg['experiment'] = args['experiment'].lower()
+    # for arg in args:
+    #     if args[arg]:
+    #         run_cfg[arg] = args[arg]
 
     # Verify experiment type
     experiment_type = run_cfg['experiment']

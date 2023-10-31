@@ -19,7 +19,7 @@ class ImagePretrainDataset(Dataset):
             transforms2: Optional[Callable],
             img_ext: str = ".jpg"
     ):
-        self.image_paths = img_records["filepath"]
+        self.image_paths = [p.replace("\\", "/") for p in img_records["filepath"].tolist()]
         self.img_root_dir = img_root_dir
         if channels == 1:
             self.img_read_flag = cv2.IMREAD_GRAYSCALE
@@ -60,8 +60,8 @@ class ImageClassificationDataset(Dataset):
             img_ext: str = ".jpg"
     ):
         assert len(img_paths) == len(labels), "Number of images and labels must match."
+        self.image_paths = [p.replace("\\", "/") for p in img_paths]
         self.img_root_dir = img_root_dir
-        self.image_paths = img_paths
         if n_classes > 2:
             self.labels = one_hot(torch.from_numpy(labels), num_classes=n_classes)
         else:

@@ -34,6 +34,9 @@ if __name__ == '__main__':
     parser.add_argument('--dist_backend', default='gloo', type=str, help='Backend for distributed package')
     parser.add_argument('--log_interval', default=1, type=int, help='Number of steps after which to log')
     parser.add_argument('--num_workers', required=False, default=1, type=int, help='Number of processes for loading data')
+    parser.add_argument('--max_time_delta', required=False, default=None, type=float, help='Number of processes for loading data')
+    parser.add_argument('--sample_weights', required=False, default=False, type=bool, help='Number of processes for loading data')
+    parser.add_argument('--_lambda', required=False, default=None, type=float, help='Number of processes for loading data')
     args = vars(parser.parse_args())
     print(f"Args: {args}")
 
@@ -55,6 +58,12 @@ if __name__ == '__main__':
     assert method in ['simclr', 'barlow_twins', 'vicreg', 'uscl', 'ncus_vicreg', 'ncus_barlow_twins', 'ncus_simclr'], \
         f"Unsupported pretraining method: {method}"
     hparams = {k.lower(): v for k, v in cfg['PRETRAIN']['HPARAMS'].pop(method.upper()).items()}
+    if args["max_time_delta"]:
+        hparams["max_time_delta"] = args["max_time_delta"]
+    if args["sample_weights"]:
+        hparams["sample_weights"] = args["sample_weights"]
+    if args["_lambda"]:
+        hparams["_lambda"] = args["_lambda"]
 
     image_dir = args['image_dir'] if args['image_dir'] else cfg["PATHS"]["IMAGES"]
     splits_dir = args['splits_dir'] if args['splits_dir'] else cfg["PATHS"]["SPLITS"]
@@ -166,6 +175,7 @@ if __name__ == '__main__':
     cur_datetime = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     checkpoint_dir = os.path.join(cfg['PATHS']['MODEL_WEIGHTS'], 'pretrained', method,
                                   us_mode + cur_datetime)
+    print(f"Checkpoint Dir: {checkpoint_dir}")
     run_cfg_path = os.path.join(checkpoint_dir, "run_cfg.json")
     # with open(run_cfg_path, "w") as f:
     #     config_str = json.dumps(run_cfg)
