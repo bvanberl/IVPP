@@ -81,13 +81,13 @@ def get_supervised_bmode_augmentions(
         get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
 
-def get_uscl_supervised_augmentations(
+def get_uscl_augmentations(
     height: int,
     width: int,
     mean_pixel_val: List[float] = None,
     std_pixel_val: List[float] = None,  
 ):
-    """Defines augmentation pipeline for supervised learning experiments.
+    """Defines augmentation pipeline involving only crops and reflections.
 
     Same pipeline as used in USCL: https://arxiv.org/pdf/2011.13066.pdf
     :param height: Image height
@@ -100,10 +100,10 @@ def get_uscl_supervised_augmentations(
     :return: Callable augmentation pipeline
     """
     return v2.Compose([
+        ToTensor(),
         v2.Resize((height, width)),
         v2.RandomResizedCrop((height, width), scale=(0.8, 1.0), ratio=(0.8, 1.25)),
         v2.RandomHorizontalFlip(p=0.5),
-        ToTensor(),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
 

@@ -40,6 +40,11 @@ def get_augmentation_transforms_pretrain(
             get_bmode_baseline_augmentations(height, width),
             get_bmode_baseline_augmentations(height, width)
         )
+    elif pipeline == "uscl_baseline":
+        return (
+            get_uscl_augmentations(height, width),
+            get_uscl_augmentations(height, width)
+        )
     else:
         if pipeline != "none":
             logging.warning(f"Unrecognized augmentation pipeline: {pipeline}.\n"
@@ -159,7 +164,14 @@ def get_video_dataset_from_frames(
             agg_dict.update({
                 c: "first"
             })
-    frames_df["clip_dir"] = frames_df["filepath"].apply(lambda path: "/".join(path.split("\\")[:-1]))
+
+    def get_clip_dir(path):
+        if "\\" in path:
+            return "/".join(path.split("\\")[:-1])
+        else:
+            return "/".join(path.split("/")[:-1])
+
+    frames_df["clip_dir"] = frames_df["filepath"].apply(lambda path: get_clip_dir(path))
     new_video_df = frames_df.groupby("id").agg(agg_dict).reset_index()
     new_video_df.rename(columns={"filepath": "n_frames"}, inplace=True)
     new_video_df = new_video_df.merge(clips_df[["id"] + clip_columns], how="left", on="id")
@@ -332,8 +344,8 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
         labels = np.zeros(image_df.shape[0], dtype=float)
     if augment_pipeline == "supervised_bmode":
         transforms = get_supervised_bmode_augmentions(height, width, **preprocess_kwargs)
-    elif augment_pipeline == "supervised_uscl":
-        transforms = get_uscl_supervised_augmentions(height, width, **preprocess_kwargs)
+    elif augment_pipeline == "uscl_baseline":
+        transforms = get_uscl_augmentions(height, width, **preprocess_kwargs)
     else:
         if augment_pipeline != "none":
             logging.warning(f"Unrecognized augmentation pipeline: {augment_pipeline}.\n"

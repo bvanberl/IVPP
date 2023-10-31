@@ -33,12 +33,16 @@ if __name__ == '__main__':
     parser.add_argument('--dist_url', default="localhost", type=str, help='URL used to set up distributed training')
     parser.add_argument('--dist_backend', default='gloo', type=str, help='Backend for distributed package')
     parser.add_argument('--log_interval', default=1, type=int, help='Number of steps after which to log')
-    parser.add_argument('--num_workers', required=False, default=1, type=int, help='Number of processes for loading data')
     parser.add_argument('--max_time_delta', required=False, default=None, type=float, help='Number of processes for loading data')
-    parser.add_argument('--sample_weights', required=False, default=False, type=bool, help='Number of processes for loading data')
+    parser.add_argument('--sample_weights', required=False, default=None, type=bool, help='Number of processes for loading data')
     parser.add_argument('--_lambda', required=False, default=None, type=float, help='Number of processes for loading data')
+    parser.add_argument('--augment_pipeline', required=False, type=str, default="supervised_bmode", help='Augmentation pipeline')
+    parser.add_argument('--num_workers', required=False, type=int, default=0, help='Number of workers for data loading')
+    parser.add_argument('--seed', required=False, type=int, help='Random seed')
+    parser.add_argument('--checkpoint_name', required=False, type=str, help='Augmentation pipeline')
     args = vars(parser.parse_args())
     print(f"Args: {args}")
+    print(f"Config: {cfg}")
 
     world_size = args["world_size"]
     if world_size > 1:
@@ -48,8 +52,9 @@ if __name__ == '__main__':
         current_device = 0
         rank = 0
         torch.cuda.set_device(current_device)
-    torch.manual_seed(cfg['PRETRAIN']['SEED'])
-    np.random.seed(cfg['PRETRAIN']['SEED'])
+    seed = args['seed'] if args['seed'] else cfg['PRETRAIN']['SEED']
+    torch.manual_seed(seed)
+    np.random.seed(seed)
 
     if args['method']:
         method = args['method'].lower()
@@ -58,11 +63,11 @@ if __name__ == '__main__':
     assert method in ['simclr', 'barlow_twins', 'vicreg', 'uscl', 'ncus_vicreg', 'ncus_barlow_twins', 'ncus_simclr'], \
         f"Unsupported pretraining method: {method}"
     hparams = {k.lower(): v for k, v in cfg['PRETRAIN']['HPARAMS'].pop(method.upper()).items()}
-    if args["max_time_delta"]:
+    if args["max_time_delta"] is not None:
         hparams["max_time_delta"] = args["max_time_delta"]
-    if args["sample_weights"]:
+    if args["sample_weights"] is not None:
         hparams["sample_weights"] = args["sample_weights"]
-    if args["_lambda"]:
+    if args["_lambda"] is not None:
         hparams["_lambda"] = args["_lambda"]
 
     image_dir = args['image_dir'] if args['image_dir'] else cfg["PATHS"]["IMAGES"]
@@ -72,7 +77,10 @@ if __name__ == '__main__':
     batch_size = cfg['PRETRAIN']['BATCH_SIZE']
     use_unlabelled = cfg['PRETRAIN']['USE_UNLABELLED']
     use_imagenet = cfg['PRETRAIN']['IMAGENET_WEIGHTS']
-    augment_pipeline = cfg['PRETRAIN']['AUGMENT_PIPELINE']
+    if args["augment_pipeline"]:
+        augment_pipeline = args["augment_pipeline"]
+    else:
+        augment_pipeline = cfg['PRETRAIN']['AUGMENT_PIPELINE']
     channels = 3 # if use_imagenet else 1
     us_mode = "bmode"   # TODO: Add M-mode
     n_workers = args["num_workers"]
@@ -105,7 +113,7 @@ if __name__ == '__main__':
     resume_id = wandb_cfg["RESUME_ID"]
     if use_wandb:
         run_cfg = {
-            'seed': cfg['PRETRAIN']['SEED']
+            'seed': seed
         }
         run_cfg.update(cfg['DATA'])
         run_cfg.update(cfg['PRETRAIN'])
@@ -172,9 +180,12 @@ if __name__ == '__main__':
     )
 
     # Set checkpoint/log dir
-    cur_datetime = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    if args['checkpoint_name']:
+        checkpoint_name = args['checkpoint_name']      
+    else:               
+        checkpoint_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     checkpoint_dir = os.path.join(cfg['PATHS']['MODEL_WEIGHTS'], 'pretrained', method,
-                                  us_mode + cur_datetime)
+                                  us_mode + checkpoint_name)
     print(f"Checkpoint Dir: {checkpoint_dir}")
     run_cfg_path = os.path.join(checkpoint_dir, "run_cfg.json")
     # with open(run_cfg_path, "w") as f:
