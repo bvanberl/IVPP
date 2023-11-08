@@ -180,7 +180,10 @@ def get_classification_metrics(
     :return: Dictionary of class metrics
     """
     metrics = {}
-    metrics["auc"] = roc_auc_score(y_true, y_prob)
+    try:
+        metrics["auc"] = roc_auc_score(y_true, y_prob)
+    except ValueError:
+        metrics["auc"] = 0.
     if n_classes == 2:
         metrics["precision"] = precision_score(y_true, y_pred, zero_division=0.)
         metrics["recall"] = recall_score(y_true, y_pred, zero_division=0.)

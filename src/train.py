@@ -165,7 +165,7 @@ def train_classifier(
                   ", ".join([f"val/{m}: {val_metrics[m]:.4f}" for m in val_metrics]))
 
             val_loss = val_metrics["loss"]
-            scheduler.step(val_loss)  # Update LR if necessary
+            scheduler.step()  # Update LR if necessary
 
             # Save checkpoint if validation loss has improved
             old_best_val_metric = best_val_metric
@@ -261,6 +261,7 @@ def single_train(run_cfg):
     img_dim = (channels, height, width)
     run_cfg['img_dim'] = img_dim
     n_workers = run_cfg["num_workers"]
+    priority_metric = run_cfg["priority_metric"]
     print(f"Run config:\n {run_cfg}")
 
     # Prepare training, validation, and test sets.
@@ -287,13 +288,16 @@ def single_train(run_cfg):
     run_test = args['test_eval'] == 'Y'
 
     # Define training callbacks
-    cur_datetime = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    if run_cfg['checkpoint_name']:
+        checkpoint_name = run_cfg['checkpoint_name']    
+    else:               
+        checkpoint_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     checkpoint_dir = os.path.join(
         cfg['PATHS']['MODEL_WEIGHTS'],
         'supervised',
         pretrain_method,
         experiment_type,
-        cur_datetime
+        checkpoint_name
     )
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -340,7 +344,7 @@ def single_train(run_cfg):
         optimizer = SGD(param_groups, 0, weight_decay=weight_decay, momentum=momentum)
     else:
         raise ValueError(f"{run_cfg['optimizer']} is an unsupported optimizer.")
-    scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=0, last_epoch=-1) 
+    scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=0, last_epoch=-1, verbose=True) 
 
     train_classifier(
         classifier,
@@ -353,7 +357,8 @@ def single_train(run_cfg):
         scheduler,
         checkpoint_path,
         writer,
-        run_test
+        run_test,
+        metric_of_interest=priority_metric
     )
 
 
@@ -419,6 +424,7 @@ def kfold_cross_validation(run_cfg):
         augment_pipeline = run_cfg['augment_pipeline']
         run_cfg['img_dim'] = img_dim
         n_workers = run_cfg["num_workers"]
+        priority_metric = run_cfg["priority_metric"]
         print(f"Run config:\n {run_cfg}")
 
         # Prepare training, validation, and test sets.
@@ -498,7 +504,7 @@ def kfold_cross_validation(run_cfg):
             optimizer = SGD(param_groups, 0, weight_decay=weight_decay, momentum=momentum)
         else:
             raise ValueError(f"{run_cfg['optimizer']} is an unsupported optimizer.")
-        scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=0, last_epoch=-1) 
+        scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=0., last_epoch=-1, verbose=True) 
 
         fold_test_metrics = train_classifier(
             classifier,
@@ -511,7 +517,8 @@ def kfold_cross_validation(run_cfg):
             scheduler,
             checkpoint_path,
             writer,
-            True
+            True,
+            metric_of_interest=priority_metric
         )
         if i == 1:
             test_metrics = {m: [fold_test_metrics[m]] for m in fold_test_metrics}
@@ -523,7 +530,9 @@ def kfold_cross_validation(run_cfg):
     for m in metric_names:
         test_metrics[f"{m}_mean"] = np.mean(test_metrics[m])
         test_metrics[f"{m}_std"] = np.std(test_metrics[m])
-    print(f"Cross-validation results:\n {test_metrics}")
+    print("Cross-validation results:")
+    for key, val in test_metrics.items():
+        print(f'{key}: {val}')
     with open(os.path.join(os.path.dirname(checkpoint_dir), 'kfold_results.json'), 'w') as f:
         json.dump(test_metrics, f)
 
@@ -549,6 +558,8 @@ if __name__ == '__main__':
     parser.add_argument('--label', required=False, type=str, default="label", help='Label column name')
     parser.add_argument('--num_workers', required=False, type=int, default=0, help='Number of workers for data loading')
     parser.add_argument('--seed', required=False, type=int, help='Random seed')
+    parser.add_argument('--checkpoint_name', required=False, type=str, help='Augmentation pipeline')
+    parser.add_argument('--priority_metric', required=False, type=str, help='Metric to prioritize in model evaluation')
     args = vars(parser.parse_args())
 
     torch.manual_seed(cfg['TRAIN']['SEED'])

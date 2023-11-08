@@ -33,9 +33,9 @@ if __name__ == '__main__':
     parser.add_argument('--dist_url', default="localhost", type=str, help='URL used to set up distributed training')
     parser.add_argument('--dist_backend', default='gloo', type=str, help='Backend for distributed package')
     parser.add_argument('--log_interval', default=1, type=int, help='Number of steps after which to log')
-    parser.add_argument('--max_time_delta', required=False, default=None, type=float, help='Number of processes for loading data')
-    parser.add_argument('--sample_weights', required=False, default=None, type=bool, help='Number of processes for loading data')
-    parser.add_argument('--_lambda', required=False, default=None, type=float, help='Number of processes for loading data')
+    parser.add_argument('--max_time_delta', required=False, default=None, type=float, help='Maximum number of seconds between positive pairs')
+    parser.add_argument('-w', '--sample_weights', action='store_true', help='If True, uses sample weights')
+    parser.add_argument('--_lambda', required=False, default=None, type=float, help='Invariance term weight')
     parser.add_argument('--augment_pipeline', required=False, type=str, default="supervised_bmode", help='Augmentation pipeline')
     parser.add_argument('--num_workers', required=False, type=int, default=0, help='Number of workers for data loading')
     parser.add_argument('--seed', required=False, type=int, help='Random seed')
@@ -69,6 +69,7 @@ if __name__ == '__main__':
         hparams["sample_weights"] = args["sample_weights"]
     if args["_lambda"] is not None:
         hparams["_lambda"] = args["_lambda"]
+    print(f"Method hyperparameters: {hparams}")
 
     image_dir = args['image_dir'] if args['image_dir'] else cfg["PATHS"]["IMAGES"]
     splits_dir = args['splits_dir'] if args['splits_dir'] else cfg["PATHS"]["SPLITS"]
