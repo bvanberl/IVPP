@@ -1,6 +1,6 @@
 PATHS:
-  IMAGES: "bmodes1_internal/data"
-  SPLITS: "bmodes1_internal/splits"
+  IMAGES: "parenchymal_internal/data/bmodes"
+  SPLITS: "parenchymal_internal/splits"
   MODEL_WEIGHTS: "results/models"
 
 DATA:
@@ -19,7 +19,7 @@ PRETRAIN:
   WARMUP_EPOCHS: 30
   WEIGHT_DECAY: 0.000001
   EXTRACTOR: 'resnet14'
-  PROJ_NODES: [1024, 1024]
+  PROJ_NODES: [512, 512]
   USE_BIAS: False
   IMAGENET_WEIGHTS: True
   USE_UNLABELLED: True

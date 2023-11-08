@@ -1,5 +1,6 @@
 from typing import List
 
+import torch
 import torchvision
 from torchvision.transforms import ToTensor, v2
 
@@ -43,8 +44,9 @@ def get_validation_scaling(
     :return: Callable augmentation pipeline
     """
     return v2.Compose([
-        v2.ToTensor(),  # Rescale to [0, 1] & convert to channels-first
+        v2.ToImage(),
         v2.Resize((height, width), antialias=True),
+        v2.ToDtype(torch.float32, scale=True),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
 
@@ -69,7 +71,7 @@ def get_supervised_bmode_augmentions(
     :return: Callable augmentation pipeline
     """
     return v2.Compose([
-        ToTensor(),  # Rescale to [0, 1] & convert to channels-first
+        v2.ToImage(),
         v2.Resize((height, width), antialias=True),
         v2.ColorJitter(
             brightness=brightness_delta,
@@ -78,16 +80,17 @@ def get_supervised_bmode_augmentions(
             hue=0.
         ),
         v2.RandomHorizontalFlip(p=0.5),
+        v2.ToDtype(torch.float32, scale=True),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
 
-def get_uscl_augmentations(
+def get_uscl_supervised_augmentations(
     height: int,
     width: int,
     mean_pixel_val: List[float] = None,
-    std_pixel_val: List[float] = None,  
+    std_pixel_val: List[float] = None,
 ):
-    """Defines augmentation pipeline involving only crops and reflections.
+    """Defines augmentation pipeline for supervised learning experiments.
 
     Same pipeline as used in USCL: https://arxiv.org/pdf/2011.13066.pdf
     :param height: Image height
@@ -100,10 +103,10 @@ def get_uscl_augmentations(
     :return: Callable augmentation pipeline
     """
     return v2.Compose([
-        ToTensor(),
-        v2.Resize((height, width)),
-        v2.RandomResizedCrop((height, width), scale=(0.8, 1.0), ratio=(0.8, 1.25)),
+        v2.ToImage(),
+        v2.RandomResizedCrop((height, width), scale=(0.8, 1.0), ratio=(0.8, 1.25), antialias=True),
         v2.RandomHorizontalFlip(p=0.5),
+        v2.ToDtype(torch.float32, scale=True),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
 
@@ -124,12 +127,13 @@ def get_byol_augmentations(
     :return: Callable augmentation pipeline
     """
     return v2.Compose([
-        ToTensor(),
+        v2.ToImage(),
         v2.RandomResizedCrop((height, width), scale=(0.08, 1.), antialias=True),
         v2.RandomHorizontalFlip(p=0.5),
         v2.RandomApply([v2.ColorJitter(0.4, 0.4, 0., 0.)], p=0.8),
         v2.RandomApply([v2.GaussianBlur(23)], p=0.8),
         v2.RandomSolarize(0.5, p=0.1),
+        v2.ToDtype(torch.float32, scale=True),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
 
@@ -171,7 +175,7 @@ def get_bmode_baseline_augmentations(
     :return: Callable augmentation pipeline
     """
     return v2.Compose([
-        ToTensor(),
+        v2.ToImage(),
         v2.RandomResizedCrop((height, width), scale=(min_crop_area, max_crop_area), antialias=True),
         v2.RandomHorizontalFlip(p=0.5),
         v2.RandomApply([v2.ColorJitter(max_brightness, 0., 0., 0.)], p=brightness_prob),
@@ -179,6 +183,6 @@ def get_bmode_baseline_augmentations(
         v2.RandomApply([
             v2.GaussianBlur(gauss_filter_width, (min_blur_sigma, max_blur_sigma))],
             p=blur_prob),
+        v2.ToDtype(torch.float32, scale=True),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
-

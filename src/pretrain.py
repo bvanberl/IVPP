@@ -158,6 +158,8 @@ if __name__ == '__main__':
     if world_size > 1:
         model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[current_device])
+    print(model.extractor)
+    print(model.projector)
     torchsummary.summary(model.extractor, input_size=(channels, width, height))
     torchsummary.summary(model.projector, input_size=(model.h_dim,))
 

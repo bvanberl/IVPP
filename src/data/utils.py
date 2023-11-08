@@ -127,7 +127,7 @@ def prepare_bmode_pretrain_dataset(
         batch_size=device_batch_size,
         shuffle=shuffle,
         num_workers=n_workers,
-        pin_memory=False,
+        pin_memory=True,
         sampler=sampler
     )
     return data_loader
