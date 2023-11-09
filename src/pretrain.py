@@ -34,7 +34,7 @@ if __name__ == '__main__':
     parser.add_argument('--dist_backend', default='gloo', type=str, help='Backend for distributed package')
     parser.add_argument('--log_interval', default=1, type=int, help='Number of steps after which to log')
     parser.add_argument('--max_time_delta', required=False, default=None, type=float, help='Maximum number of seconds between positive pairs')
-    parser.add_argument('-w', '--sample_weights', action='store_true', help='If True, uses sample weights')
+    parser.add_argument('--sample_weights', type=int, required=False, default=None, help='If 0, no sample weights. If 1, sample weights.')
     parser.add_argument('--_lambda', required=False, default=None, type=float, help='Invariance term weight')
     parser.add_argument('--augment_pipeline', required=False, type=str, default="supervised_bmode", help='Augmentation pipeline')
     parser.add_argument('--num_workers', required=False, type=int, default=0, help='Number of workers for data loading')
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     if args["max_time_delta"] is not None:
         hparams["max_time_delta"] = args["max_time_delta"]
     if args["sample_weights"] is not None:
-        hparams["sample_weights"] = args["sample_weights"]
+        hparams["sample_weights"] = bool(args["sample_weights"])
     if args["_lambda"] is not None:
         hparams["_lambda"] = args["_lambda"]
     print(f"Method hyperparameters: {hparams}")
@@ -82,8 +82,8 @@ if __name__ == '__main__':
         augment_pipeline = args["augment_pipeline"]
     else:
         augment_pipeline = cfg['PRETRAIN']['AUGMENT_PIPELINE']
-    channels = 3 # if use_imagenet else 1
-    us_mode = "bmode"   # TODO: Add M-mode
+    channels = 3
+    us_mode = cfg['DATA']['US_MODE']   # TODO: Add M-mode
     n_workers = args["num_workers"]
 
     train_ds, train_df, val_ds, val_set = load_data_for_pretrain(

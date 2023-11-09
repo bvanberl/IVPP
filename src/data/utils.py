@@ -9,7 +9,7 @@ import wandb
 import albumentations as A
 import cv2
 
-from src.data.datasets.ncus_dataset import NCUSDataset
+from src.data.datasets.ncus_dataset import NCUSBmodeDataset, NCUSMmodeDataset
 from src.data.datasets.image_datasets import *
 from src.data.augmentation.pipelines import *
 
@@ -54,10 +54,12 @@ def get_augmentation_transforms_pretrain(
             get_validation_scaling(height, width),
         )
 
-def prepare_bmode_pretrain_dataset(
+
+def prepare_pretrain_dataset(
         img_root: str,
         pretrain_method: str,
-        bmode_df: pd.DataFrame,
+        us_mode: str,
+        file_df: pd.DataFrame,
         batch_size: int,
         width: int,
         height: int,
@@ -69,14 +71,15 @@ def prepare_bmode_pretrain_dataset(
         **preprocess_kwargs
 ) -> DataLoader:
     '''
-    Constructs a B-mode dataset for a joint embedding self-supervised pretraining task.
+    Constructs a US dataset for a joint embedding self-supervised pretraining task.
     :param img_root: Root directory in which all images are stored. Will be prepended to path in frames table.
     :param pretrain_method: Pretraining method
-    :param bmode_df: A table of B-mode properties. Each row corresponds to a B-mode clip.
+    :param us_mode: US Mode. Either 'bmode' or 'mmode'
+    :param file_df: A table of US video or image properties
     :param batch_size: Batch size for pretraining
-    :param width: Desired width of B-mode images
-    :param height: Desired height of B-mode images
-    :param augment: If True, applies data augmentation transforms to the inputs.
+    :param width: Desired width of US images
+    :param height: Desired height of US images
+    :param augment: If True, applies data augmentation transforms to the inputs
     :param shuffle: Flag indicating whether to shuffle the dataset
     :param channels: Number of channels
     :param max_time_delta: Maximum temporal separation of two frames
@@ -95,19 +98,32 @@ def prepare_bmode_pretrain_dataset(
         **preprocess_kwargs
     )
     if pretrain_method in ["ncus_barlow_twins", "ncus_vicreg"]:
-        dataset = NCUSDataset(
-            bmode_df,
-            img_root,
-            channels,
-            preprocess_kwargs["max_time_delta"],
-            transforms1=augment1,
-            transforms2=augment2,
-            sample_weights=preprocess_kwargs["sample_weights"]
-        )
+        if us_mode == 'mmode':
+            dataset = NCUSMmodeDataset(
+                file_df,
+                img_root,
+                channels,
+                preprocess_kwargs["max_x_delta"],
+                transforms1=augment1,
+                transforms2=augment2,
+                sample_weights=preprocess_kwargs["sample_weights"],
+                img_ext='.png'
+            )
+        else:
+            dataset = NCUSBmodeDataset(
+                file_df,
+                img_root,
+                channels,
+                preprocess_kwargs["max_time_delta"],
+                transforms1=augment1,
+                transforms2=augment2,
+                sample_weights=preprocess_kwargs["sample_weights"],
+                img_ext='.jpg'
+            )
     elif pretrain_method in ["simclr", "barlow_twins", "vicreg"]:
 
         dataset = ImagePretrainDataset(
-            bmode_df,
+            file_df,
             img_root,
             channels,
             transforms1=augment1,
@@ -157,7 +173,7 @@ def get_video_dataset_from_frames(
 
     agg_dict = {
         "filepath": "count",
-        "clip_dir": "first"
+        "id": "first",
     }
     for c in frames_df.columns:
         if "_label" in c:
@@ -172,7 +188,7 @@ def get_video_dataset_from_frames(
             return "/".join(path.split("/")[:-1])
 
     frames_df["clip_dir"] = frames_df["filepath"].apply(lambda path: get_clip_dir(path))
-    new_video_df = frames_df.groupby("id").agg(agg_dict).reset_index()
+    new_video_df = frames_df.groupby("clip_dir").agg(agg_dict).reset_index()
     new_video_df.rename(columns={"filepath": "n_frames"}, inplace=True)
     new_video_df = new_video_df.merge(clips_df[["id"] + clip_columns], how="left", on="id")
 
@@ -215,14 +231,22 @@ def load_data_for_pretrain(
     :param max_pixel_val: Maximum value for pixel intensity
     :param width: Desired width of images
     :param height: Desired height of images
+    :param us_mode: US Mode. Either 'bmode' or 'mmode'.
     :param world_size: Number of processes. If 1, then not using distributed mode
     :param n_workers: Number of workers for preloading batches
     :param preprocess_kwargs: Keyword arguments for preprocessing
     :return: dataset for pretraining
     """
+    
+    if us_mode == 'bmode':
+        image_fn_suffix = 'frames'
+    elif us_mode == 'mmode':
+        image_fn_suffix = 'mmodes'
+    else:
+        raise Exception(f"Invalid US mode provided: {us_mode}")
 
     # Load data for pretraining
-    labelled_train_frames_path = os.path.join(splits_dir, 'train_set_frames.csv')
+    labelled_train_frames_path = os.path.join(splits_dir, f'train_set_{image_fn_suffix}.csv')
     labelled_train_clips_path = os.path.join(splits_dir, 'train_set_clips.csv')
     if os.path.exists(labelled_train_frames_path) and os.path.exists(labelled_train_clips_path):
         labelled_train_frames_df = pd.read_csv(labelled_train_frames_path)
@@ -230,7 +254,7 @@ def load_data_for_pretrain(
     else:
         labelled_train_frames_df = pd.DataFrame()
         labelled_train_clips_df = pd.DataFrame()
-    unlabelled_frames_path = os.path.join(splits_dir, 'unlabelled_frames.csv')
+    unlabelled_frames_path = os.path.join(splits_dir, f'unlabelled_{image_fn_suffix}.csv')
     unlabelled_clips_path = os.path.join(splits_dir, 'unlabelled_clips.csv')
     if os.path.exists(unlabelled_frames_path) and os.path.exists(unlabelled_clips_path):
         unlabelled_frames_df = pd.read_csv(unlabelled_frames_path)
@@ -238,7 +262,7 @@ def load_data_for_pretrain(
     else:
         unlabelled_frames_df = pd.DataFrame()
         unlabelled_clips_df = pd.DataFrame()
-    val_frames_path = os.path.join(splits_dir, 'val_set_frames.csv')
+    val_frames_path = os.path.join(splits_dir, f'val_set_{image_fn_suffix}.csv')
     val_clips_path = os.path.join(splits_dir, 'val_set_clips.csv')
     if os.path.exists(val_frames_path) and os.path.exists(val_clips_path):
         val_frames_df = pd.read_csv(val_frames_path)
@@ -265,40 +289,39 @@ def load_data_for_pretrain(
         else:
             val_df = None
 
-    if us_mode == 'bmode':
-        train_set = prepare_bmode_pretrain_dataset(
+    train_set = prepare_pretrain_dataset(
+        image_dir,
+        pretrain_method,
+        us_mode,
+        train_df,
+        batch_size,
+        width,
+        height,
+        augment_pipeline=augment_pipeline,
+        shuffle=True,
+        channels=channels,
+        world_size=world_size,
+        n_workers=n_workers,
+        **preprocess_kwargs
+    )
+    if val_frames_df.shape[0] > 0:
+        val_set = prepare_pretrain_dataset(
             image_dir,
             pretrain_method,
-            train_df,
+            us_mode,
+            val_df,
             batch_size,
             width,
             height,
-            augment_pipeline=augment_pipeline,
-            shuffle=True,
+            augment_pipeline="none",
+            shuffle=False,
             channels=channels,
-            world_size=world_size,
+            distributed=False,
             n_workers=n_workers,
             **preprocess_kwargs
         )
-        if val_frames_df.shape[0] > 0:
-            val_set = prepare_bmode_pretrain_dataset(
-                image_dir,
-                pretrain_method,
-                val_df,
-                batch_size,
-                width,
-                height,
-                augment_pipeline="none",
-                shuffle=False,
-                channels=channels,
-                distributed=False,
-                n_workers=n_workers,
-                **preprocess_kwargs
-            )
-        else:
-            val_set = None
     else:
-        raise NotImplementedError("Currently, only B-mode datasets have been implemented")
+        val_set = None
 
     return train_set, train_df, val_set, val_df
 
