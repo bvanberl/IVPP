@@ -368,7 +368,7 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
     if augment_pipeline == "supervised_bmode":
         transforms = get_supervised_bmode_augmentions(height, width, **preprocess_kwargs)
     elif augment_pipeline == "uscl_baseline":
-        transforms = get_uscl_augmentions(height, width, **preprocess_kwargs)
+        transforms = get_uscl_augmentations(height, width, **preprocess_kwargs)
     else:
         if augment_pipeline != "none":
             logging.warning(f"Unrecognized augmentation pipeline: {augment_pipeline}.\n"

@@ -365,8 +365,10 @@ def single_train(run_cfg):
 def kfold_cross_validation(run_cfg):
 
     test_metrics = {}
-    cur_datetime = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    checkpoint_dir = None
+    if run_cfg['checkpoint_name'] is None:
+        checkpoint_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    else:
+        checkpoint_name = run_cfg['checkpoint_name']
     k = run_cfg["folds"]
 
     for i in range(1, k + 1):
@@ -457,7 +459,7 @@ def kfold_cross_validation(run_cfg):
             'supervised',
             pretrain_method,
             experiment_type,
-            f"{cur_datetime}_kfold",
+            checkpoint_name,
             f"fold{i}"
         )
         os.makedirs(checkpoint_dir, exist_ok=True)

@@ -84,7 +84,7 @@ def get_supervised_bmode_augmentions(
         get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])
 
-def get_uscl_supervised_augmentations(
+def get_uscl_augmentations(
     height: int,
     width: int,
     mean_pixel_val: List[float] = None,

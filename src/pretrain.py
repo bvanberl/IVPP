@@ -35,7 +35,7 @@ if __name__ == '__main__':
     parser.add_argument('--log_interval', default=1, type=int, help='Number of steps after which to log')
     parser.add_argument('--max_time_delta', required=False, default=None, type=float, help='Maximum number of seconds between positive pairs')
     parser.add_argument('--sample_weights', type=int, required=False, default=None, help='If 0, no sample weights. If 1, sample weights.')
-    parser.add_argument('--_lambda', required=False, default=None, type=float, help='Invariance term weight')
+    parser.add_argument('--lambda_', required=False, default=None, type=float, help='Invariance term weight')
     parser.add_argument('--augment_pipeline', required=False, type=str, default="supervised_bmode", help='Augmentation pipeline')
     parser.add_argument('--num_workers', required=False, type=int, default=0, help='Number of workers for data loading')
     parser.add_argument('--seed', required=False, type=int, help='Random seed')
@@ -67,8 +67,8 @@ if __name__ == '__main__':
         hparams["max_time_delta"] = args["max_time_delta"]
     if args["sample_weights"] is not None:
         hparams["sample_weights"] = bool(args["sample_weights"])
-    if args["_lambda"] is not None:
-        hparams["_lambda"] = args["_lambda"]
+    if args["lambda_"] is not None:
+        hparams["lambda_"] = args["lambda_"]
     print(f"Method hyperparameters: {hparams}")
 
     image_dir = args['image_dir'] if args['image_dir'] else cfg["PATHS"]["IMAGES"]
