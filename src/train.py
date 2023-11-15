@@ -288,10 +288,10 @@ def single_train(run_cfg):
     run_test = args['test_eval'] == 'Y'
 
     # Define training callbacks
-    if run_cfg['checkpoint_name']:
-        checkpoint_name = run_cfg['checkpoint_name']    
-    else:               
+    if run_cfg['checkpoint_name'] is None:
         checkpoint_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    else:
+        checkpoint_name = run_cfg['checkpoint_name']
     checkpoint_dir = os.path.join(
         cfg['PATHS']['MODEL_WEIGHTS'],
         'supervised',
@@ -304,7 +304,7 @@ def single_train(run_cfg):
     print(f"Checkpoint Dir: {checkpoint_dir}")
     checkpoint_path = os.path.join(checkpoint_dir, "checkpoint.pth")
     log_dir = os.path.join(checkpoint_dir, "logs")
-    os.makedirs(log_dir)
+    os.makedirs(log_dir, exist_ok=True)
     writer = SummaryWriter(log_dir)
 
     # Save run config
@@ -327,6 +327,7 @@ def single_train(run_cfg):
     classifier = Sequential(extractor, head).cuda()
     torchsummary.summary(extractor, input_size=(channels, width, height))
     torchsummary.summary(head, input_size=(h_dim,))
+    print(classifier)
 
     # Define an optimizer that assigns different learning rates to the
     # extractor and head.
@@ -560,7 +561,7 @@ if __name__ == '__main__':
     parser.add_argument('--label', required=False, type=str, default="label", help='Label column name')
     parser.add_argument('--num_workers', required=False, type=int, default=0, help='Number of workers for data loading')
     parser.add_argument('--seed', required=False, type=int, help='Random seed')
-    parser.add_argument('--checkpoint_name', required=False, type=str, help='Augmentation pipeline')
+    parser.add_argument('--checkpoint_name', required=False, type=str, default=None, help='Checkpoint folder name')
     parser.add_argument('--priority_metric', required=False, type=str, help='Metric to prioritize in model evaluation')
     args = vars(parser.parse_args())
 

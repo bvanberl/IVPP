@@ -19,8 +19,8 @@ PRETRAIN:
   INIT_LR: 0.2
   WARMUP_EPOCHS: 30
   WEIGHT_DECAY: 0.000001
-  EXTRACTOR: 'resnet18'
-  PROJ_NODES: [1024, 1024]
+  EXTRACTOR: 'resnet14'
+  PROJ_NODES: [512, 512]
   USE_BIAS: False
   IMAGENET_WEIGHTS: True
   USE_UNLABELLED: True
@@ -58,17 +58,17 @@ TRAIN:
   EXPERIMENT: 'fine-tune'
   FOLDS: 5
   SEED: 1
-  EXTRACTOR_TYPE: 'resnet18'
+  EXTRACTOR_TYPE: 'resnet14'
   LABEL: 'label'
   PROP_TRAIN: 1.0
   EXTRACTOR_WEIGHTS: 'results/models/pretrained/ncus_vicreg/bmode20231025-182546/final_model.pth' #'imagenet'
-  BATCH_SIZE: 32
+  BATCH_SIZE: 384
   N_CUTOFF_LAYERS: 0
-  EPOCHS: 100
-  LR_EXTRACTOR: 0.01
-  LR_HEAD: 0.01
+  EPOCHS: 10
+  LR_EXTRACTOR: 0.00001
+  LR_HEAD: 0.001
   MOMENTUM: 0.9
   WEIGHT_DECAY: 0.0001
   MLP_HIDDEN_LAYERS: [32]
-  FREEZE_PREFIX: ["layer1", "layer2", "layer3", "layer4.0"]
+  FREEZE_PREFIX: ["layer1", "layer2", "layer3.0"] #, "layer4.0"]
   OPTIMIZER: "adam"
