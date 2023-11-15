@@ -23,7 +23,7 @@ def get_augmentation_transforms_pretrain(
     """Get augmentation transformation pipelines
 
     :param pipeline: Name of pipeline.
-                     One of {'byol', 'bmode_baseline', 'none'}
+                     One of {'byol', 'ncus', 'uscl', or 'none'}
     :param height: Image height
     :param width: Image width
     :param pipeline_kwargs: Pipeline keyword arguments
@@ -32,26 +32,26 @@ def get_augmentation_transforms_pretrain(
     pipeline = pipeline.lower()
     if pipeline == "byol":
         return (
-            get_byol_augmentations(height, width),
-            get_byol_augmentations(height, width)
+            get_byol_augmentations(height, width, **augment_kwargs),
+            get_byol_augmentations(height, width, **augment_kwargs)
         )
-    elif pipeline == "bmode_baseline":
+    elif pipeline == "ncus":
         return (
-            get_bmode_baseline_augmentations(height, width),
-            get_bmode_baseline_augmentations(height, width)
+            get_ncus_augmentations(height, width, **augment_kwargs),
+            get_ncus_augmentations(height, width, **augment_kwargs)
         )
-    elif pipeline == "uscl_baseline":
+    elif pipeline == "uscl":
         return (
-            get_uscl_augmentations(height, width),
-            get_uscl_augmentations(height, width)
+            get_uscl_augmentations(height, width, **augment_kwargs),
+            get_uscl_augmentations(height, width, **augment_kwargs)
         )
     else:
         if pipeline != "none":
             logging.warning(f"Unrecognized augmentation pipeline: {pipeline}.\n"
                             f"No augmentations will be applied.")
         return (
-            get_validation_scaling(height, width),
-            get_validation_scaling(height, width),
+            get_validation_scaling(height, width, **augment_kwargs),
+            get_validation_scaling(height, width, **augment_kwargs),
         )
 
 
@@ -63,7 +63,7 @@ def prepare_pretrain_dataset(
         batch_size: int,
         width: int,
         height: int,
-        augment_pipeline: str = "bmode_baseline",
+        augment_pipeline: str = "ncus",
         shuffle: bool = False,
         channels: int = 1,
         n_workers: int = 0,
@@ -95,7 +95,7 @@ def prepare_pretrain_dataset(
         augment_pipeline,
         height,
         width,
-        **preprocess_kwargs
+        **preprocess_kwargs["augmentation"]
     )
     if pretrain_method in ["ncus_barlow_twins", "ncus_vicreg"]:
         if us_mode == 'mmode':
@@ -205,7 +205,7 @@ def load_data_for_pretrain(
         splits_dir: str,
         pretrain_method: str,
         batch_size: int,
-        augment_pipeline: str = "bmode_baseline",
+        augment_pipeline: str = "ncus",
         use_unlabelled: bool = True,
         channels: int = 1,
         width: int = 224,
@@ -365,9 +365,9 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
     else:
         print(f"No label column named {label_col}. Setting labels to 0.")
         labels = np.zeros(image_df.shape[0], dtype=float)
-    if augment_pipeline == "supervised_bmode":
+    if augment_pipeline == "supervised_ncus":
         transforms = get_supervised_bmode_augmentions(height, width, **preprocess_kwargs)
-    elif augment_pipeline == "uscl_baseline":
+    elif augment_pipeline == "uscl":
         transforms = get_uscl_augmentations(height, width, **preprocess_kwargs)
     else:
         if augment_pipeline != "none":

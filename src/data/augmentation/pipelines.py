@@ -138,11 +138,13 @@ def get_byol_augmentations(
     ])
 
 
-def get_bmode_baseline_augmentations(
+def get_ncus_augmentations(
         height: int,
         width: int,
         min_crop_area: float = 0.4,
         max_crop_area: float = 1.0,
+        min_crop_ratio: float = 3. / 4.,
+        max_crop_ratio: float = 4. / 3.,
         brightness_prob: float = 0.5,
         max_brightness: float = 0.25,
         contrast_prob: float = 0.7,
@@ -162,6 +164,8 @@ def get_bmode_baseline_augmentations(
     :param width: Image width
     :param min_crop_area: Minimum area of cropped region
     :param max_crop_area: Maximum area of cropped region
+    :param min_crop_ratio: Minimum aspect ratio (w:h) for cropped region
+    :param max_crop_ratio: Maximum aspect ratio (w:h) for cropped region
     :param brightness_prob: Probability of brightness change
     :param max_brightness: Maximum brightness difference
     :param contrast_prob: Probability of contrast change
@@ -176,7 +180,12 @@ def get_bmode_baseline_augmentations(
     """
     return v2.Compose([
         v2.ToImage(),
-        v2.RandomResizedCrop((height, width), scale=(min_crop_area, max_crop_area), antialias=True),
+        v2.RandomResizedCrop(
+            (height, width),
+            scale=(min_crop_area, max_crop_area),
+            ratio=(min_crop_ratio, max_crop_ratio),
+            antialias=True
+        ),
         v2.RandomHorizontalFlip(p=0.5),
         v2.RandomApply([v2.ColorJitter(max_brightness, 0., 0., 0.)], p=brightness_prob),
         v2.RandomApply([v2.ColorJitter(max_contrast, 0., 0., 0.)], p=contrast_prob),

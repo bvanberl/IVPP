@@ -36,7 +36,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_time_delta', required=False, default=None, type=float, help='Maximum number of seconds between positive pairs')
     parser.add_argument('--sample_weights', type=int, required=False, default=None, help='If 0, no sample weights. If 1, sample weights.')
     parser.add_argument('--lambda_', required=False, default=None, type=float, help='Invariance term weight')
-    parser.add_argument('--augment_pipeline', required=False, type=str, default="supervised_bmode", help='Augmentation pipeline')
+    parser.add_argument('--augment_pipeline', required=False, type=str, default=None, help='Augmentation pipeline')
     parser.add_argument('--num_workers', required=False, type=int, default=0, help='Number of workers for data loading')
     parser.add_argument('--seed', required=False, type=int, help='Random seed')
     parser.add_argument('--checkpoint_name', required=False, type=str, help='Augmentation pipeline')
@@ -78,10 +78,14 @@ if __name__ == '__main__':
     batch_size = cfg['PRETRAIN']['BATCH_SIZE']
     use_unlabelled = cfg['PRETRAIN']['USE_UNLABELLED']
     use_imagenet = cfg['PRETRAIN']['IMAGENET_WEIGHTS']
-    if args["augment_pipeline"]:
+    if args["augment_pipeline"] is not None:
         augment_pipeline = args["augment_pipeline"]
     else:
         augment_pipeline = cfg['PRETRAIN']['AUGMENT_PIPELINE']
+    if augment_pipeline == 'ncus':
+        hparams['augmentation'] = {k.lower(): v for k, v in cfg['PRETRAIN']['NCUS_AUGMENT_ARGS'].items()}
+    else:
+        hparams['augmentation'] = {}
     channels = 3
     us_mode = cfg['DATA']['US_MODE']   # TODO: Add M-mode
     n_workers = args["num_workers"]
