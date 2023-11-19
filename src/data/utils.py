@@ -32,8 +32,8 @@ def get_augmentation_transforms_pretrain(
     pipeline = pipeline.lower()
     if pipeline == "byol":
         return (
-            get_byol_augmentations(height, width, **augment_kwargs),
-            get_byol_augmentations(height, width, **augment_kwargs)
+            get_byol_augmentations(height, width),
+            get_byol_augmentations(height, width)
         )
     elif pipeline == "ncus":
         return (
@@ -42,16 +42,16 @@ def get_augmentation_transforms_pretrain(
         )
     elif pipeline == "uscl":
         return (
-            get_uscl_augmentations(height, width, **augment_kwargs),
-            get_uscl_augmentations(height, width, **augment_kwargs)
+            get_uscl_augmentations(height, width),
+            get_uscl_augmentations(height, width)
         )
     else:
         if pipeline != "none":
             logging.warning(f"Unrecognized augmentation pipeline: {pipeline}.\n"
                             f"No augmentations will be applied.")
         return (
-            get_validation_scaling(height, width, **augment_kwargs),
-            get_validation_scaling(height, width, **augment_kwargs),
+            get_validation_scaling(height, width),
+            get_validation_scaling(height, width),
         )
 
 
@@ -328,6 +328,7 @@ def load_data_for_pretrain(
 
 def prepare_labelled_dataset(image_df: pd.DataFrame,
                              img_root: str,
+                             us_mode: str,
                              height: int,
                              width: int,
                              batch_size: int,
@@ -338,13 +339,14 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
                              n_classes: int = 2,
                              n_workers: int = 0,
                              world_size: int = 1,
-                             **preprocess_kwargs
+                             **augment_kwargs
                              ):
     '''
     Constructs a dataset for a supervised learning task.
     :param image_df: A table of image properties. Each row corresponds to an US image.
                      Must contain "filepath" and label_col columns
     :param img_root: Root directory containing images
+    :param us_mode: US mode ("bmode" or "mmode")
     :param height: Image height
     :param width: Image width
     :param batch_size: Batch size for pretraining
@@ -355,37 +357,36 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
     :param n_classes: Number of classes
     :param n_workers: Number of workers for loading images
     :param world_size: Number of processes. If 1, then not using distributed mode
-    :param preprocess_kwargs: Keyword arguments for the preprocessor initializer
+    :param augment_kwargs: Keyword arguments for augmentations
     :return: A batched dataset loader
     '''
-
     image_paths = image_df["filepath"].tolist()
     if label_col in image_df.columns:
         labels = image_df[label_col].to_numpy(dtype=np.int64)
     else:
         print(f"No label column named {label_col}. Setting labels to 0.")
         labels = np.zeros(image_df.shape[0], dtype=float)
-    if augment_pipeline == "supervised_ncus":
-        transforms = get_supervised_bmode_augmentions(height, width, **preprocess_kwargs)
+    if augment_pipeline == "ncus":
+        transforms = get_ncus_augmentations(height, width, **augment_kwargs)
+    elif augment_pipeline == "supervised_ncus":
+        transforms = get_supervised_bmode_augmentions(height, width, **augment_kwargs)
     elif augment_pipeline == "uscl":
-        transforms = get_uscl_augmentations(height, width, **preprocess_kwargs)
+        transforms = get_uscl_augmentations(height, width, **augment_kwargs)
     else:
         if augment_pipeline != "none":
             logging.warning(f"Unrecognized augmentation pipeline: {augment_pipeline}.\n"
                             f"No augmentations will be applied.")
         transforms = get_validation_scaling(height, width)
-    if label_col == 'lung_sliding':
-        # TODO: Add M-mode preprocessor
-        raise NotImplementedError("M-mode data not supported yet.")
-    else:
-        dataset = ImageClassificationDataset(
-            img_root,
-            image_paths,
-            labels,
-            channels,
-            n_classes,
-            transforms=transforms
-        )
+    img_ext = ".png" if us_mode == "mmode" else ".jpg"
+    dataset = ImageClassificationDataset(
+        img_root,
+        image_paths,
+        labels,
+        channels,
+        n_classes,
+        transforms=transforms,
+        img_ext=img_ext
+    )
     if world_size > 1:
         sampler = DistributedSampler(dataset, shuffle=shuffle)
         shuffle = None
@@ -405,6 +406,7 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
 
 def load_data_supervised(cfg: dict,
                          batch_size: int,
+                         us_mode: str,
                          label_col: str,
                          data_artifact_name: str,
                          splits_artifact_name: str,
@@ -423,10 +425,12 @@ def load_data_supervised(cfg: dict,
                          n_workers: int = 0,
                          fold: Optional[int] = None,
                          k: Optional[int] = None,
+                         **augment_kwargs
     ) -> (DataLoader, DataLoader, DataLoader, pd.DataFrame, pd.DataFrame, pd.DataFrame):
     '''
     Retrieve data, data splits, and returns an iterable preprocessed dataset for supervised learning experiments
     :param cfg: The config.yaml file dictionary
+    :param us_mode: US mode ("bmode" or "mmode")
     :param image_dir: Images directory
     :param splits_dir: Directory containing CSVs for each data split
     :param batch_size: Batch size for datasets
@@ -449,6 +453,13 @@ def load_data_supervised(cfg: dict,
     :return: (training set, validation set, test set, training set table, validation set table, test set table, )
     '''
 
+    if us_mode == 'bmode':
+        image_fn_suffix = 'frames'
+    elif us_mode == 'mmode':
+        image_fn_suffix = 'mmodes'
+    else:
+        raise Exception(f"Invalid US mode provided: {us_mode}")
+
     # Retrieve versioned dataset artifact
     if run is not None and redownload_data:
         data = run.use_artifact(f"{data_artifact_name}:{data_version}")
@@ -460,15 +471,15 @@ def load_data_supervised(cfg: dict,
         splits_dir = splits_dir
 
     if fold is None:
-        train_frames_df = pd.read_csv(os.path.join(splits_dir, 'train_set_frames.csv'))
+        train_frames_df = pd.read_csv(os.path.join(splits_dir, f'train_set_{image_fn_suffix}.csv'))
         train_frames_df = train_frames_df.sample(frac=1.0, random_state=seed)
         if percent_train < 1.0:
             n_train_examples = int(percent_train * train_frames_df.shape[0])
             train_frames_df = train_frames_df.iloc[:n_train_examples]
 
-        val_frames_path = os.path.join(splits_dir, 'val_set_frames.csv')
+        val_frames_path = os.path.join(splits_dir, f'val_set_{image_fn_suffix}.csv')
         val_frames_df = pd.read_csv(val_frames_path) if os.path.exists(val_frames_path) else pd.DataFrame()
-        test_frames_path = os.path.join(splits_dir, 'test_set_frames.csv')
+        test_frames_path = os.path.join(splits_dir, f'test_set_{image_fn_suffix}.csv')
         test_frames_df = pd.read_csv(test_frames_path) if os.path.exists(test_frames_path) else pd.DataFrame()
 
         # Remove examples that do not have a label relevant for the current task
@@ -476,18 +487,19 @@ def load_data_supervised(cfg: dict,
         val_frames_df = val_frames_df.loc[val_frames_df[label_col] != -1]
         test_frames_df = test_frames_df.loc[test_frames_df[label_col] != -1]
     else:
-        test_frames_df = pd.read_csv(os.path.join(splits_dir, f'fold{fold}_frames.csv'))
+        test_frames_df = pd.read_csv(os.path.join(splits_dir, f'fold{fold}_{image_fn_suffix}.csv'))
         val_frames_df = test_frames_df
         train_frames_df = pd.DataFrame(columns=test_frames_df.columns)
         for i in range(1, k + 1):
             if i != fold:
-                fold_df = pd.read_csv(os.path.join(splits_dir, f'fold{i}_frames.csv'))
+                fold_df = pd.read_csv(os.path.join(splits_dir, f'fold{i}_{image_fn_suffix}.csv'))
                 train_frames_df = pd.concat([train_frames_df, fold_df], axis=0)
 
     n_classes = train_frames_df[label_col].nunique()
     train_set = prepare_labelled_dataset(
         train_frames_df,
         data_dir,
+        us_mode,
         height,
         width,
         batch_size,
@@ -496,11 +508,13 @@ def load_data_supervised(cfg: dict,
         shuffle=True,
         channels=channels,
         n_classes=n_classes,
-        n_workers=n_workers
+        n_workers=n_workers,
+        **augment_kwargs
     )
     val_set = prepare_labelled_dataset(
         val_frames_df,
         data_dir,
+        us_mode,
         height,
         width,
         batch_size,
@@ -514,6 +528,7 @@ def load_data_supervised(cfg: dict,
     test_set = prepare_labelled_dataset(
         test_frames_df,
         data_dir,
+        us_mode,
         height,
         width,
         batch_size,

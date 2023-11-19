@@ -101,7 +101,13 @@ def train_classifier(
         class_thresh: float = 0.5,
         metric_of_interest: str = "loss"
 ):
-    loss_fn = BCEWithLogitsLoss() if n_classes == 2 else CrossEntropyLoss()
+    if n_classes == 2:
+        pos_weight = torch.tensor(train_ds.dataset.label_freqs[0] / train_ds.dataset.label_freqs[1]).cuda()
+        print("POS WEIGHT", pos_weight)
+        loss_fn = BCEWithLogitsLoss(pos_weight=pos_weight)
+    else:
+        class_weights = torch.tensor(np.reciprocal(train_ds.dataset.label_freqs) / 2.).cuda()
+        loss_fn = CrossEntropyLoss(weight=class_weights)
     scaler = torch.cuda.amp.GradScaler()
     log_interval = args["log_interval"]
     batches_per_epoch = len(train_ds)
@@ -205,6 +211,7 @@ def train_classifier(
 
 
 def single_train(run_cfg):
+    print("\n\n\n\nSDFGEFFE" , run_cfg['augment_pipeline'])
 
     # Associate artifact with corresponding pre-training method
     if use_wandb:
@@ -249,6 +256,7 @@ def single_train(run_cfg):
     splits_version = wandb_cfg['SPLITS_VERSION']
 
     # Obtain remaining experiment attributes
+    us_mode = run_cfg['us_mode']
     label_col = run_cfg['label']
     redownload_data = args['redownload_data'] in ['Yes', 'yes', 'y', 'Y']
     percent_train = run_cfg['prop_train']
@@ -258,6 +266,10 @@ def single_train(run_cfg):
     height = run_cfg['height']
     width = run_cfg['width']
     augment_pipeline = run_cfg['augment_pipeline']
+    if augment_pipeline == 'ncus':
+        augment_kwargs = {k.lower(): v for k, v in cfg['AUGMENT']['NCUS_AUGMENT_ARGS'].items()}
+    else:
+        augment_kwargs = {}
     img_dim = (channels, height, width)
     run_cfg['img_dim'] = img_dim
     n_workers = run_cfg["num_workers"]
@@ -268,6 +280,7 @@ def single_train(run_cfg):
     train_ds, val_ds, test_ds, train_df, val_df, test_df = load_data_supervised(
         cfg,
         batch_size,
+        us_mode,
         label_col,
         data_artifact,
         splits_artifact,
@@ -283,7 +296,8 @@ def single_train(run_cfg):
         channels=channels,
         augment_pipeline=augment_pipeline,
         n_workers=n_workers,
-        seed=seed
+        seed=seed,
+        **augment_kwargs
     )
     run_test = args['test_eval'] == 'Y'
 
@@ -557,7 +571,7 @@ if __name__ == '__main__':
     parser.add_argument('--dist_backend', default='gloo', type=str, help='Backend for distributed package')
     parser.add_argument('--log_interval', default=20, type=int, help='Number of steps after which to log')
     parser.add_argument('--test_eval', required=False, type=str, default='N', help='Evaluate on test set')
-    parser.add_argument('--augment_pipeline', required=False, type=str, default="supervised_bmode", help='Augmentation pipeline')
+    parser.add_argument('--augment_pipeline', required=False, type=str, default="ncus", help='Augmentation pipeline')
     parser.add_argument('--label', required=False, type=str, default="label", help='Label column name')
     parser.add_argument('--num_workers', required=False, type=int, default=0, help='Number of workers for data loading')
     parser.add_argument('--seed', required=False, type=int, help='Random seed')
@@ -577,7 +591,7 @@ if __name__ == '__main__':
         torch.cuda.set_device(current_device)
 
     # Set up configuration for this run
-    print(args)
+    print("ARGUMENTS:", args)
     run_cfg = {k.lower(): v for k, v in cfg['TRAIN'].items()}
     run_cfg.update({k.lower(): v for k, v in cfg['DATA'].items()})
     run_cfg.update({k: args[k] for k in args if args[k] is not None})

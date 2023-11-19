@@ -154,7 +154,7 @@ def get_ncus_augmentations(
         max_blur_sigma: float = 2.0,
         gauss_filter_width: int = 5,
         mean_pixel_val: List[float] = None,
-        std_pixel_val: List[float] = None,
+        std_pixel_val: List[float] = None
 ):
     """Applies random transformations to input B-mode image.
 

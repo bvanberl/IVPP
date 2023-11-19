@@ -61,17 +61,18 @@ class ImageClassificationDataset(Dataset):
     ):
         assert len(img_paths) == len(labels), "Number of images and labels must match."
         self.image_paths = [p.replace("\\", "/") for p in img_paths]
+        self.img_ext = img_ext
         self.img_root_dir = img_root_dir
         if n_classes > 2:
             self.labels = one_hot(torch.from_numpy(labels), num_classes=n_classes)
         else:
             self.labels = np.expand_dims(labels, axis=-1).astype(np.float32)
+        self.label_freqs = np.bincount(labels) / labels.shape[0]
         if channels == 1:
             self.img_read_flag = cv2.IMREAD_GRAYSCALE
         else:
             self.img_read_flag = cv2.IMREAD_COLOR
         self.transforms = transforms
-        self.img_ext = img_ext
         self.cardinality = len(self.image_paths)
 
     def __len__(self):

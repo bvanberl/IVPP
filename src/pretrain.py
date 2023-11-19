@@ -34,6 +34,7 @@ if __name__ == '__main__':
     parser.add_argument('--dist_backend', default='gloo', type=str, help='Backend for distributed package')
     parser.add_argument('--log_interval', default=1, type=int, help='Number of steps after which to log')
     parser.add_argument('--max_time_delta', required=False, default=None, type=float, help='Maximum number of seconds between positive pairs')
+    parser.add_argument('--max_x_delta', required=False, default=None, type=int, help='Maximum number of seconds between positive pairs')
     parser.add_argument('--sample_weights', type=int, required=False, default=None, help='If 0, no sample weights. If 1, sample weights.')
     parser.add_argument('--lambda_', required=False, default=None, type=float, help='Invariance term weight')
     parser.add_argument('--augment_pipeline', required=False, type=str, default=None, help='Augmentation pipeline')
@@ -65,6 +66,8 @@ if __name__ == '__main__':
     hparams = {k.lower(): v for k, v in cfg['PRETRAIN']['HPARAMS'].pop(method.upper()).items()}
     if args["max_time_delta"] is not None:
         hparams["max_time_delta"] = args["max_time_delta"]
+    if args["max_x_delta"] is not None:
+        hparams["max_x_delta"] = args["max_x_delta"]
     if args["sample_weights"] is not None:
         hparams["sample_weights"] = bool(args["sample_weights"])
     if args["lambda_"] is not None:
@@ -83,7 +86,7 @@ if __name__ == '__main__':
     else:
         augment_pipeline = cfg['PRETRAIN']['AUGMENT_PIPELINE']
     if augment_pipeline == 'ncus':
-        hparams['augmentation'] = {k.lower(): v for k, v in cfg['PRETRAIN']['NCUS_AUGMENT_ARGS'].items()}
+        hparams['augmentation'] = {k.lower(): v for k, v in cfg['AUGMENT']['NCUS_AUGMENT_ARGS'].items()}
     else:
         hparams['augmentation'] = {}
     channels = 3
