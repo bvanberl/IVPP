@@ -1,3 +1,5 @@
+from typing import Union, List
+
 import torch
 from torch.nn import Module, Sequential, Identity, AdaptiveAvgPool2d
 import torchvision
@@ -16,7 +18,8 @@ VGG16_WEIGHTS = "https://download.pytorch.org/models/vgg16-397923af.pth"
 def get_extractor(
         extractor_name: str,
         imagenet_weights: bool = False,
-        n_cutoff_layers: int = 0
+        n_cutoff_layers: int = 0,
+        freeze_prefix: Union[str, List[str]] = None
 ) -> Module:
     '''Initializes the desired extractor.
     :param extractor_name: A string in the list below specifying the model
@@ -25,6 +28,7 @@ def get_extractor(
         initialized and bias units will be disabled.
     :param n_cutoff_layers: Number of layers to remove from the end of the
         extractor model.
+    :param freeze_prefix: Prefixes for layers to be frozen
     :return: TensorFlow model callable for the extractor, yet to be compiled
     '''
 
@@ -41,6 +45,10 @@ def get_extractor(
         model = get_vgg16(imagenet_weights, n_cutoff_layers)
     else:
         raise Exception(f"Unsupported extractor architecture: {extractor_name}")
+    if freeze_prefix:
+        for name, param in model.named_parameters():
+            if any(name.startswith(prefix) for prefix in freeze_prefix):
+                param.requires_grad = False
     return model
 
 def get_resnet18(

@@ -236,7 +236,8 @@ def single_train(run_cfg):
     extractor = get_extractor(
         extractor_type,
         extractor_weights == 'imagenet',
-        n_cutoff_layers
+        n_cutoff_layers,
+        freeze_prefix
     )
     if extractor_weights in ['scratch', 'imagenet']:
         pretrain_method = "fully_supervised"

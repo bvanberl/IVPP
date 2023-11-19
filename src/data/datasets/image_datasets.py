@@ -67,7 +67,7 @@ class ImageClassificationDataset(Dataset):
             self.labels = one_hot(torch.from_numpy(labels), num_classes=n_classes)
         else:
             self.labels = np.expand_dims(labels, axis=-1).astype(np.float32)
-        self.label_freqs = np.bincount(labels) / labels.shape[0]
+        self.label_freqs = np.bincount(labels[labels != -1]) / labels.shape[0]
         if channels == 1:
             self.img_read_flag = cv2.IMREAD_GRAYSCALE
         else:

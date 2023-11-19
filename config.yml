@@ -61,7 +61,7 @@ TRAIN:
   EXTRACTOR_TYPE: 'resnet14'
   LABEL: 'label'
   PROP_TRAIN: 1.0
-  EXTRACTOR_WEIGHTS: 'results/models/pretrained/ncus_vicreg/bmode20231025-182546/final_model.pth' #'imagenet'
+  EXTRACTOR_WEIGHTS: 'B:/Downloads/mmode12942510/final_model.pth' #'imagenet'
   BATCH_SIZE: 384
   N_CUTOFF_LAYERS: 0
   EPOCHS: 10
