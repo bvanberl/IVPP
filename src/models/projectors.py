@@ -18,6 +18,8 @@ def get_projector(
     assert len(fc_nodes) >= 2, "Projector must have >= 2 layers"
     layers = []
     layers.append(Linear(input_dim, fc_nodes[0], bias=use_bias))
+    layers.append(BatchNorm1d(fc_nodes[0]))
+    layers.append(ReLU(True))
     for i in range(1, len(fc_nodes) - 1):
         layers.append(Linear(fc_nodes[i - 1], fc_nodes[i], bias=use_bias))
         layers.append(BatchNorm1d(fc_nodes[i]))

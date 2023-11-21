@@ -290,8 +290,8 @@ class VICRegLoss(nn.Module):
         """
         std_z1 = torch.sqrt(z1.var(dim=0) + self.epsilon)
         std_z2 = torch.sqrt(z2.var(dim=0) + self.epsilon)
-        reg_std_z1 = torch.mean(F.relu(1 - std_z1))
-        reg_std_z2 = torch.mean(F.relu(1 - std_z2))
+        reg_std_z1 = torch.mean(F.relu(self.gamma - std_z1))
+        reg_std_z2 = torch.mean(F.relu(self.gamma - std_z2))
         return 0.5 * (reg_std_z1 + reg_std_z2)
 
     def _covariance_term(self, z1: Tensor, z2: Tensor) -> Tensor:

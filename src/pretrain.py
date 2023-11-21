@@ -212,8 +212,6 @@ if __name__ == '__main__':
     scaler = torch.cuda.amp.GradScaler()
     log_interval = args["log_interval"]
     pretrain_state = {}
-    last_val_loss = np.inf
-
 
     for epoch in range(epochs):
         model.train(True)
@@ -285,12 +283,7 @@ if __name__ == '__main__':
                       ", ".join([f"val/{m}: {val_scalars[m]:.4f}" for m in val_scalars]))
 
         # Save checkpoint
-        if val_ds:
-            val_loss = val_scalars["loss"]
-            val_check = val_loss < last_val_loss
-        else:
-            val_check = True
-        if rank == 0 and val_check:
+        if rank == 0:
             pretrain_state = dict(
                 epoch=epoch + 1,
                 model=model.state_dict(),

@@ -188,7 +188,7 @@ def get_ncus_augmentations(
         ),
         v2.RandomHorizontalFlip(p=0.5),
         v2.RandomApply([v2.ColorJitter(max_brightness, 0., 0., 0.)], p=brightness_prob),
-        v2.RandomApply([v2.ColorJitter(max_contrast, 0., 0., 0.)], p=contrast_prob),
+        v2.RandomApply([v2.ColorJitter(0., max_contrast, 0., 0.)], p=contrast_prob),
         v2.RandomApply([
             v2.GaussianBlur(gauss_filter_width, (min_blur_sigma, max_blur_sigma))],
             p=blur_prob),

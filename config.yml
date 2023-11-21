@@ -1,11 +1,11 @@
 PATHS:
-  IMAGES: "B:/Datasets/LUS_SSL/parenchymal_internal/data/mmodes"
-  SPLITS: "B:/Datasets/LUS_SSL/parenchymal_internal/splits"
+  IMAGES: "data/bmodes"
+  SPLITS: "splits"
   MODEL_WEIGHTS: "results/models"
 
 DATA:
   HEIGHT: 224
-  WIDTH: 128
+  WIDTH: 224
   MIN_PIXEL_VALUE: 0.0
   MAX_PIXEL_VALUE: 255.0
   NUM_CHANNELS: 3
@@ -19,9 +19,9 @@ PRETRAIN:
   INIT_LR: 0.2
   WARMUP_EPOCHS: 30
   WEIGHT_DECAY: 0.000001
-  EXTRACTOR: 'resnet14'
-  PROJ_NODES: [512, 512]
-  USE_BIAS: False
+  EXTRACTOR: 'mobilenetv3'
+  PROJ_NODES: [1024, 1024]
+  USE_BIAS: True
   IMAGENET_WEIGHTS: True
   USE_UNLABELLED: True
   METHOD: "ncus_vicreg"
@@ -42,7 +42,7 @@ PRETRAIN:
       NU: 1.0
       MAX_TIME_DELTA: 2.0
       MAX_X_DELTA: 20
-      SAMPLE_WEIGHTS: True
+      SAMPLE_WEIGHTS: False
     NCUS_BARLOW_TWINS:
       LAMBDA_: 0.005
       MAX_TIME_DELTA: 3
@@ -55,13 +55,13 @@ PRETRAIN:
       SAMPLE_WEIGHTS: True
 
 TRAIN:
-  EXPERIMENT: 'fine-tune'
+  EXPERIMENT: 'linear'
   FOLDS: 5
   SEED: 1
-  EXTRACTOR_TYPE: 'resnet14'
+  EXTRACTOR_TYPE: 'mobilenetv3'
   LABEL: 'label'
   PROP_TRAIN: 1.0
-  EXTRACTOR_WEIGHTS: 'B:/Downloads/mmode12942510/final_model.pth' #'imagenet'
+  EXTRACTOR_WEIGHTS: 'final_model.pth' #'imagenet'
   BATCH_SIZE: 384
   N_CUTOFF_LAYERS: 0
   EPOCHS: 10
@@ -70,7 +70,7 @@ TRAIN:
   MOMENTUM: 0.9
   WEIGHT_DECAY: 0.0001
   MLP_HIDDEN_LAYERS: [32]
-  FREEZE_PREFIX: ["layer1", "layer2", "layer3.0"] #, "layer4.0"]
+  FREEZE_PREFIX: [] #["layer1", "layer2", "layer3.0"] #, "layer4.0"]
   OPTIMIZER: "adam"
 
 AUGMENT:

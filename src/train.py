@@ -211,7 +211,6 @@ def train_classifier(
 
 
 def single_train(run_cfg):
-    print("\n\n\n\nSDFGEFFE" , run_cfg['augment_pipeline'])
 
     # Associate artifact with corresponding pre-training method
     if use_wandb:
