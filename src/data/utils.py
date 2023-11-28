@@ -106,8 +106,7 @@ def prepare_pretrain_dataset(
                 preprocess_kwargs["max_x_delta"],
                 transforms1=augment1,
                 transforms2=augment2,
-                sample_weights=preprocess_kwargs["sample_weights"],
-                img_ext='.png'
+                sample_weights=preprocess_kwargs["sample_weights"]
             )
         else:
             dataset = NCUSBmodeDataset(
@@ -117,8 +116,7 @@ def prepare_pretrain_dataset(
                 preprocess_kwargs["max_time_delta"],
                 transforms1=augment1,
                 transforms2=augment2,
-                sample_weights=preprocess_kwargs["sample_weights"],
-                img_ext='.jpg'
+                sample_weights=preprocess_kwargs["sample_weights"]
             )
     elif pretrain_method in ["simclr", "barlow_twins", "vicreg"]:
 
@@ -170,6 +168,8 @@ def get_video_dataset_from_frames(
         proportional to their length (in frames)
     :return: Video records DataFrame
     """
+    print(frames_df.head())
+    print(clips_df.head())
 
     agg_dict = {
         "filepath": "count",
@@ -188,10 +188,10 @@ def get_video_dataset_from_frames(
             return "/".join(path.split("/")[:-1])
 
     frames_df["clip_dir"] = frames_df["filepath"].apply(lambda path: get_clip_dir(path))
+    frames_df.head()
     new_video_df = frames_df.groupby("clip_dir").agg(agg_dict).reset_index()
     new_video_df.rename(columns={"filepath": "n_frames"}, inplace=True)
     new_video_df = new_video_df.merge(clips_df[["id"] + clip_columns], how="left", on="id")
-
     if rep_by_length:
         min_n_frames = new_video_df["n_frames"].min()
         copies = (new_video_df["n_frames"] / min_n_frames).astype(int).tolist()
@@ -377,15 +377,13 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
             logging.warning(f"Unrecognized augmentation pipeline: {augment_pipeline}.\n"
                             f"No augmentations will be applied.")
         transforms = get_validation_scaling(height, width)
-    img_ext = ".png" if us_mode == "mmode" else ".jpg"
     dataset = ImageClassificationDataset(
         img_root,
         image_paths,
         labels,
         channels,
         n_classes,
-        transforms=transforms,
-        img_ext=img_ext
+        transforms=transforms
     )
     if world_size > 1:
         sampler = DistributedSampler(dataset, shuffle=shuffle)
@@ -494,6 +492,12 @@ def load_data_supervised(cfg: dict,
             if i != fold:
                 fold_df = pd.read_csv(os.path.join(splits_dir, f'fold{i}_{image_fn_suffix}.csv'))
                 train_frames_df = pd.concat([train_frames_df, fold_df], axis=0)
+
+    # For the lung sliding task, take only the brightest image from the original video
+    # if label_col == 'lung_sliding_label':
+    #     train_frames_df = train_frames_df.loc[train_frames_df['brightness_rank'] == 0]
+    #     val_frames_df = val_frames_df.loc[val_frames_df['brightness_rank'] == 0]
+    #     test_frames_df = test_frames_df.loc[test_frames_df['brightness_rank'] == 0]
 
     n_classes = train_frames_df[label_col].nunique()
     train_set = prepare_labelled_dataset(

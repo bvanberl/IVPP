@@ -41,9 +41,15 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', required=False, type=int, default=0, help='Number of workers for data loading')
     parser.add_argument('--seed', required=False, type=int, help='Random seed')
     parser.add_argument('--checkpoint_name', required=False, type=str, help='Augmentation pipeline')
+    parser.add_argument('--us_mode', required=False, type=str, help='US mode. Either "bmode" or "mmode".')
+    parser.add_argument('--min_crop_area', required=False, type=float, help='Min crop fraction for NCUS augmentations')
+    parser.add_argument('--max_crop_area', required=False, type=float, help='Max crop fraction for NCUS augmentations')
+    parser.add_argument('--min_crop_ratio', required=False, type=float, help='Min crop aspect ratiofor NCUS augmentations')
+    parser.add_argument('--max_crop_ratio', required=False, type=float, help='Max crop aspect ratio for NCUS augmentations')
+    parser.add_argument('--height', required=False, type=int, help='Image height')
+    parser.add_argument('--width', required=False, type=int, help='Image width')
     args = vars(parser.parse_args())
     print(f"Args: {args}")
-    print(f"Config: {cfg}")
 
     world_size = args["world_size"]
     if world_size > 1:
@@ -53,44 +59,53 @@ if __name__ == '__main__':
         current_device = 0
         rank = 0
         torch.cuda.set_device(current_device)
-    seed = args['seed'] if args['seed'] else cfg['PRETRAIN']['SEED']
+    seed = args['seed'] if args['seed'] else cfg['pretrain']['seed']
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    if args['method']:
-        method = args['method'].lower()
-    else:
-        method = cfg['PRETRAIN']['METHOD'].lower()
+    # Update config with values from command-line args
+    for k in cfg['data']:
+        if k in args and args[k] is not None:
+            cfg['data'][k] = args[k]
+    for k in cfg['pretrain']:
+        if k in args and args[k] is not None:
+            cfg['pretrain'][k] = args[k]
+    print(f"Config after parsing args: {cfg}")
+    
+    method = cfg['pretrain']['method'].lower()
     assert method in ['simclr', 'barlow_twins', 'vicreg', 'uscl', 'ncus_vicreg', 'ncus_barlow_twins', 'ncus_simclr'], \
         f"Unsupported pretraining method: {method}"
-    hparams = {k.lower(): v for k, v in cfg['PRETRAIN']['HPARAMS'].pop(method.upper()).items()}
-    if args["max_time_delta"] is not None:
-        hparams["max_time_delta"] = args["max_time_delta"]
-    if args["max_x_delta"] is not None:
-        hparams["max_x_delta"] = args["max_x_delta"]
-    if args["sample_weights"] is not None:
-        hparams["sample_weights"] = bool(args["sample_weights"])
-    if args["lambda_"] is not None:
-        hparams["lambda_"] = args["lambda_"]
-    print(f"Method hyperparameters: {hparams}")
+    hparams = {k.lower(): v for k, v in cfg['pretrain']['hparams'].pop(method.lower()).items()}
+    for k in args:
+        if k in hparams and args[k] is not None:
+            hparams[k] = args[k]
+    hparams["sample_weights"] = bool(hparams["sample_weights"])
 
-    image_dir = args['image_dir'] if args['image_dir'] else cfg["PATHS"]["IMAGES"]
-    splits_dir = args['splits_dir'] if args['splits_dir'] else cfg["PATHS"]["SPLITS"]
-    height = cfg['DATA']['HEIGHT']
-    width = cfg['DATA']['WIDTH']
-    batch_size = cfg['PRETRAIN']['BATCH_SIZE']
-    use_unlabelled = cfg['PRETRAIN']['USE_UNLABELLED']
-    use_imagenet = cfg['PRETRAIN']['IMAGENET_WEIGHTS']
+    image_dir = args['image_dir'] if args['image_dir'] else cfg["paths"]["images"]
+    splits_dir = args['splits_dir'] if args['splits_dir'] else cfg["paths"]["splits"]
+    height = cfg['data']['height']
+    width = cfg['data']['width']
+    batch_size = cfg['pretrain']['batch_size']
+    use_unlabelled = cfg['pretrain']['use_unlabelled']
+    use_imagenet = cfg['pretrain']['imagenet_weights']
+
+    # Determine data augmentation pipeline
     if args["augment_pipeline"] is not None:
         augment_pipeline = args["augment_pipeline"]
     else:
-        augment_pipeline = cfg['PRETRAIN']['AUGMENT_PIPELINE']
+        augment_pipeline = cfg['pretrain']['augment_pipeline']
     if augment_pipeline == 'ncus':
-        hparams['augmentation'] = {k.lower(): v for k, v in cfg['AUGMENT']['NCUS_AUGMENT_ARGS'].items()}
+        aug_params = cfg['augment']['ncus']
+        for k in aug_params:
+            if k in args and args[k] is not None:
+                aug_params[k] = args[k]
+        hparams['augmentation'] = aug_params
     else:
         hparams['augmentation'] = {}
+    print(f"Method hyperparameters: {hparams}")
+
     channels = 3
-    us_mode = cfg['DATA']['US_MODE']   # TODO: Add M-mode
+    us_mode = cfg['data']['us_mode']   # TODO: Add M-mode
     n_workers = args["num_workers"]
 
     train_ds, train_df, val_ds, val_set = load_data_for_pretrain(
@@ -112,27 +127,27 @@ if __name__ == '__main__':
     n_examples = train_df.shape[0]
     batches_per_epoch = len(train_ds)
     img_dim = (batch_size, channels, height, width)
-    extractor_name = cfg['PRETRAIN']['EXTRACTOR']
-    use_bias = cfg['PRETRAIN']['USE_BIAS']
-    proj_nodes = cfg['PRETRAIN']['PROJ_NODES']
-    n_cutoff_layers = cfg['PRETRAIN']['N_CUTOFF_LAYERS']
+    extractor_name = cfg['pretrain']['extractor']
+    use_bias = cfg['pretrain']['use_bias']
+    proj_nodes = cfg['pretrain']['proj_nodes']
+    n_cutoff_layers = cfg['pretrain']['n_cutoff_layers']
 
-    use_wandb = wandb_cfg["MODE"] == "online"
-    resume_id = wandb_cfg["RESUME_ID"]
+    use_wandb = wandb_cfg["mode"] == "online"
+    resume_id = wandb_cfg["resume_id"]
     if use_wandb:
         run_cfg = {
             'seed': seed
         }
-        run_cfg.update(cfg['DATA'])
-        run_cfg.update(cfg['PRETRAIN'])
+        run_cfg.update(cfg['data'])
+        run_cfg.update(cfg['pretrain'])
         run_cfg = {k.lower(): v for k, v in run_cfg.items()}
         run_cfg.update(hparams)
         run_cfg.update({"batches_per_epoch": batches_per_epoch})
 
         wandb_run = wandb.init(
-            project=wandb_cfg['PROJECT'],
+            project=wandb_cfg['project'],
             job_type=f"pretrain",
-            entity=wandb_cfg['ENTITY'],
+            entity=wandb_cfg['entity'],
             config=run_cfg,
             sync_tensorboard=False,
             tags=["pretrain", method],
@@ -170,11 +185,11 @@ if __name__ == '__main__':
     torchsummary.summary(model.extractor, input_size=(channels, width, height))
     torchsummary.summary(model.projector, input_size=(model.h_dim,))
 
-    epochs = cfg['PRETRAIN']['EPOCHS']
-    base_lr = cfg['PRETRAIN']['INIT_LR']
-    warmup_epochs = cfg['PRETRAIN']['WARMUP_EPOCHS']
-    weight_decay = cfg['PRETRAIN']['WEIGHT_DECAY']
-    optimizer_name = cfg['PRETRAIN']['OPTIMIZER']
+    epochs = cfg['pretrain']['epochs']
+    base_lr = cfg['pretrain']['init_lr']
+    warmup_epochs = cfg['pretrain']['warmup_epochs']
+    weight_decay = cfg['pretrain']['weight_decay']
+    optimizer_name = cfg['pretrain']['optimizer']
     optimizer = LARS(
         model.parameters(),
         lr=0,
@@ -194,7 +209,7 @@ if __name__ == '__main__':
         checkpoint_name = args['checkpoint_name']      
     else:               
         checkpoint_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    checkpoint_dir = os.path.join(cfg['PATHS']['MODEL_WEIGHTS'], 'pretrained', method,
+    checkpoint_dir = os.path.join(cfg['paths']['model_weights'], 'pretrained', method,
                                   us_mode + checkpoint_name)
     print(f"Checkpoint Dir: {checkpoint_dir}")
     run_cfg_path = os.path.join(checkpoint_dir, "run_cfg.json")

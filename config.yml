@@ -1,88 +1,89 @@
-PATHS:
-  IMAGES: "data/bmodes"
-  SPLITS: "splits"
-  MODEL_WEIGHTS: "results/models"
+paths:
+  images: "data/bmodes"
+  splits: "splits"
+  model_weights: "results/models"
 
-DATA:
-  HEIGHT: 224
-  WIDTH: 224
-  MIN_PIXEL_VALUE: 0.0
-  MAX_PIXEL_VALUE: 255.0
-  NUM_CHANNELS: 3
-  US_MODE: 'bmode'
+data:
+  height: 224
+  width: 224
+  min_pixel_value: 0.0
+  max_pixel_value: 255.0
+  num_channels: 3
+  us_mode: 'bmode'
 
-PRETRAIN:
-  SEED: 11
-  EPOCHS: 300
-  BATCH_SIZE: 384
-  OPTIMIZER: 'lars'
-  INIT_LR: 0.2
-  WARMUP_EPOCHS: 30
-  WEIGHT_DECAY: 0.000001
-  EXTRACTOR: 'mobilenetv3'
-  PROJ_NODES: [1024, 1024]
-  USE_BIAS: True
-  IMAGENET_WEIGHTS: True
-  USE_UNLABELLED: True
-  METHOD: "ncus_vicreg"
-  AUGMENT_PIPELINE: "ncus"
-  N_CUTOFF_LAYERS: 0
-  HPARAMS:
-    SIMCLR:
-      TEMPERATURE: 0.1
-    BARLOW_TWINS:
-      LAMBDA_: 0.005
-    VICREG:
-      LAMBDA_: 25.0
-      MU: 25.0
-      NU: 1.0
-    NCUS_VICREG:
-      LAMBDA_: 25.0
-      MU: 25.0
-      NU: 1.0
-      MAX_TIME_DELTA: 2.0
-      MAX_X_DELTA: 20
-      SAMPLE_WEIGHTS: False
-    NCUS_BARLOW_TWINS:
-      LAMBDA_: 0.005
-      MAX_TIME_DELTA: 3
-      MAX_X_DELTA: 20
-      SAMPLE_WEIGHTS: True
-    NCUS_SIMCLR:
-      TEMPERATURE: 0.5
-      MAX_TIME_DELTA: 1.0
-      MAX_X_DELTA: 20
-      SAMPLE_WEIGHTS: True
+pretrain:
+  seed: 11
+  epochs: 300
+  batch_size: 384
+  optimizer: 'lars'
+  init_lr: 0.2
+  warmup_epochs: 30
+  weight_decay: 0.000001
+  extractor: 'mobilenetv3'
+  proj_nodes: [1024, 1024]
+  use_bias: true
+  imagenet_weights: true
+  use_unlabelled: true
+  method: "ncus_vicreg"
+  augment_pipeline: "ncus"
+  n_cutoff_layers: 0
+  hparams:
+    simclr:
+      temperature: 0.1
+    barlow_twins:
+      lambda_: 0.005
+    vicreg:
+      lambda_: 25.0
+      mu: 25.0
+      nu: 1.0
+    ncus_vicreg:
+      lambda_: 25.0
+      mu: 25.0
+      nu: 1.0
+      max_time_delta: 2.0
+      max_x_delta: 20
+      sample_weights: false
+    ncus_barlow_twins:
+      lambda_: 0.005
+      max_time_delta: 3
+      max_x_delta: 20
+      sample_weights: true
+    ncus_simclr:
+      temperature: 0.5
+      max_time_delta: 1.0
+      max_x_delta: 20
+      sample_weights: true
 
-TRAIN:
-  EXPERIMENT: 'linear'
-  FOLDS: 5
-  SEED: 1
-  EXTRACTOR_TYPE: 'mobilenetv3'
-  LABEL: 'label'
-  PROP_TRAIN: 1.0
-  EXTRACTOR_WEIGHTS: 'final_model.pth' #'imagenet'
-  BATCH_SIZE: 384
-  N_CUTOFF_LAYERS: 0
-  EPOCHS: 10
-  LR_EXTRACTOR: 0.00001
-  LR_HEAD: 0.0001
-  MOMENTUM: 0.9
-  WEIGHT_DECAY: 0.0001
-  MLP_HIDDEN_LAYERS: [32]
-  FREEZE_PREFIX: [] #["layer1", "layer2", "layer3.0"] #, "layer4.0"]
-  OPTIMIZER: "adam"
+train:
+  experiment: 'fine-tune'
+  folds: 5
+  seed: 1
+  extractor_type: 'mobilenetv3'
+  label: 'ab_lines_label'
+  prop_train: 1.0
+  extractor_weights: 'final_model.pth' #'imagenet'
+  batch_size: 384
+  n_cutoff_layers: 0
+  epochs: 10
+  lr_extractor: 0.00001
+  lr_head: 0.0001
+  momentum: 0.9
+  weight_decay: 0.0001
+  mlp_hidden_layers: [32]
+  freeze_prefix: [] #["layer1", "layer2", "layer3", "layer4.0"] #["layer1", "layer2", "layer3.0"] #, "layer4.0"]
+  optimizer: "adam"
+  augment_pipeline: "ncus"
 
-AUGMENT:
-  NCUS_AUGMENT_ARGS:
-    MIN_CROP_AREA: 0.4 #0.7
-    MAX_CROP_AREA: 1.0
-    MIN_CROP_RATIO: 0.75 #0.33333333
-    MAX_CROP_RATIO: 1.33333 #0.5
-    BRIGHTNESS_PROB: 0.5
-    MAX_BRIGHTNESS: 0.25
-    CONTRAST_PROB: 0.7
-    MAX_CONTRAST: 0.25
-    BLUR_PROB: 0.2
-    MIN_BLUR_SIGMA: 0.1
-    MAX_BLUR_SIGMA: 2.0
+augment:
+  ncus:
+    min_crop_area: 0.4 #0.7
+    max_crop_area: 1.0
+    min_crop_ratio: 0.75 #0.33333333
+    max_crop_ratio: 1.333333 #0.5
+    brightness_prob: 0.5
+    max_brightness: 0.25
+    contrast_prob: 0.7
+    max_contrast: 0.25
+    blur_prob: 0.2
+    min_blur_sigma: 0.1
+    max_blur_sigma: 2.0

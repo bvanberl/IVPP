@@ -22,8 +22,8 @@ cfg = yaml.full_load(open(os.getcwd() + "/config.yml", 'r'))
 if os.path.exists("./wandb.yml"):
     wandb_cfg = yaml.full_load(open(os.getcwd() + "/wandb.yml", 'r'))
 else:
-    wandb_cfg = {'MODE': 'disabled'}
-use_wandb = wandb_cfg["MODE"] != "disabled"
+    wandb_cfg = {'mode': 'disabled'}
+use_wandb = wandb_cfg["mode"] != "disabled"
 
 
 def evaluate_on_dataset(
@@ -215,12 +215,12 @@ def single_train(run_cfg):
     # Associate artifact with corresponding pre-training method
     if use_wandb:
         wandb_run = wandb.init(
-            project=wandb_cfg['PROJECT'],
+            project=wandb_cfg['project'],
             job_type=f"train_{experiment_type}",
-            entity=wandb_cfg['ENTITY'],
+            entity=wandb_cfg['entity'],
             config=run_cfg,
             sync_tensorboard=True,
-            mode=wandb_cfg['MODE']
+            mode=wandb_cfg['mode']
         )
         print(f"Run config: {wandb_run}")
     else:
@@ -250,10 +250,10 @@ def single_train(run_cfg):
         )
 
     # Get identifying info for data artefacts
-    data_artifact = wandb_cfg['DATA_ARTIFACT']
-    data_version = wandb_cfg['DATA_VERSION']
-    splits_artifact = wandb_cfg['SPLITS_ARTIFACT']
-    splits_version = wandb_cfg['SPLITS_VERSION']
+    data_artifact = wandb_cfg['data_artifact']
+    data_version = wandb_cfg['data_version']
+    splits_artifact = wandb_cfg['splits_artifact']
+    splits_version = wandb_cfg['splits_version']
 
     # Obtain remaining experiment attributes
     us_mode = run_cfg['us_mode']
@@ -267,7 +267,7 @@ def single_train(run_cfg):
     width = run_cfg['width']
     augment_pipeline = run_cfg['augment_pipeline']
     if augment_pipeline == 'ncus':
-        augment_kwargs = {k.lower(): v for k, v in cfg['AUGMENT']['NCUS_AUGMENT_ARGS'].items()}
+        augment_kwargs = {k.lower(): v for k, v in cfg['augment']['ncus'].items()}
     else:
         augment_kwargs = {}
     img_dim = (channels, height, width)
@@ -307,7 +307,7 @@ def single_train(run_cfg):
     else:
         checkpoint_name = run_cfg['checkpoint_name']
     checkpoint_dir = os.path.join(
-        cfg['PATHS']['MODEL_WEIGHTS'],
+        cfg['paths']['model_weights'],
         'supervised',
         pretrain_method,
         experiment_type,
@@ -389,12 +389,12 @@ def kfold_cross_validation(run_cfg):
     for i in range(1, k + 1):
         if use_wandb:
             wandb_run = wandb.init(
-                project=wandb_cfg['PROJECT'],
+                project=wandb_cfg['project'],
                 job_type=f"train_{experiment_type}",
-                entity=wandb_cfg['ENTITY'],
+                entity=wandb_cfg['entity'],
                 config=run_cfg,
                 sync_tensorboard=True,
-                mode=wandb_cfg['MODE']
+                mode=wandb_cfg['mode']
             )
             print(f"Run config: {wandb_run}")
         else:
@@ -423,12 +423,13 @@ def kfold_cross_validation(run_cfg):
             )
 
         # Get identifying info for data artefacts
-        data_artifact = wandb_cfg['DATA_ARTIFACT']
-        data_version = wandb_cfg['DATA_VERSION']
-        splits_artifact = wandb_cfg['SPLITS_ARTIFACT']
-        splits_version = wandb_cfg['SPLITS_VERSION']
+        data_artifact = wandb_cfg['data_artifact']
+        data_version = wandb_cfg['data_version']
+        splits_artifact = wandb_cfg['splits_artifact']
+        splits_version = wandb_cfg['splits_version']
 
         # Obtain remaining experiment attributes
+        us_mode = run_cfg['us_mode']
         label_col = run_cfg['label']
         redownload_data = args['redownload_data'] in ['Yes', 'yes', 'y', 'Y']
         percent_train = run_cfg['prop_train']
@@ -448,6 +449,7 @@ def kfold_cross_validation(run_cfg):
         train_ds, val_ds, test_ds, train_df, val_df, test_df = load_data_supervised(
             cfg,
             batch_size,
+            us_mode,
             label_col,
             data_artifact,
             splits_artifact,
@@ -470,7 +472,7 @@ def kfold_cross_validation(run_cfg):
 
         # Define training callbacks
         checkpoint_dir = os.path.join(
-            cfg['PATHS']['MODEL_WEIGHTS'],
+            cfg['paths']['model_weights'],
             'supervised',
             pretrain_method,
             experiment_type,
@@ -577,10 +579,23 @@ if __name__ == '__main__':
     parser.add_argument('--seed', required=False, type=int, help='Random seed')
     parser.add_argument('--checkpoint_name', required=False, type=str, default=None, help='Checkpoint folder name')
     parser.add_argument('--priority_metric', required=False, type=str, help='Metric to prioritize in model evaluation')
+    parser.add_argument('--us_mode', required=False, type=str, help='US mode. Either "bmode" or "mmode".')
+    parser.add_argument('--min_crop_area', required=False, type=float, help='Min crop fraction for NCUS augmentations')
+    parser.add_argument('--max_crop_area', required=False, type=float, help='Max crop fraction for NCUS augmentations')
+    parser.add_argument('--min_crop_ratio', required=False, type=float, help='Min crop aspect ratiofor NCUS augmentations')
+    parser.add_argument('--max_crop_ratio', required=False, type=float, help='Max crop aspect ratio for NCUS augmentations')
+    parser.add_argument('--height', required=False, type=int, help='Image height')
+    parser.add_argument('--width', required=False, type=int, help='Image width')
+    parser.add_argument('--epochs', required=False, type=int, help='Number of epochs')
+    parser.add_argument('--batch_size', required=False, type=int, help='Batch size')
+    parser.add_argument('--lr_extractor', required=False, type=float, help='Learning rate for feature extractor')
+    parser.add_argument('--lr_head', required=False, type=float, help='Learning rate for model head')
+    parser.add_argument('--extractor_type', required=False, type=str, help='Architecture of feature extractor')
+    parser.add_argument('--freeze_prefix', nargs='*', default=[], help='Prefixes for layers we wish to freeze')
     args = vars(parser.parse_args())
 
-    torch.manual_seed(cfg['TRAIN']['SEED'])
-    np.random.seed(cfg['TRAIN']['SEED'])
+    torch.manual_seed(cfg['train']['seed'])
+    np.random.seed(cfg['train']['seed'])
     world_size = args["world_size"]
     if world_size > 1:
         current_device, rank = init_distributed_mode(args["dist_backend"], world_size, args["dist_url"])
@@ -592,15 +607,24 @@ if __name__ == '__main__':
 
     # Set up configuration for this run
     print("ARGUMENTS:", args)
-    run_cfg = {k.lower(): v for k, v in cfg['TRAIN'].items()}
-    run_cfg.update({k.lower(): v for k, v in cfg['DATA'].items()})
+    run_cfg = {k.lower(): v for k, v in cfg['train'].items()}
+    run_cfg.update({k.lower(): v for k, v in cfg['data'].items()})
     run_cfg.update({k: args[k] for k in args if args[k] is not None})
     print(f"RUN CONFIG:\n {run_cfg}")
-    # if args['experiment']:
-    #     run_cfg['experiment'] = args['experiment'].lower()
-    # for arg in args:
-    #     if args[arg]:
-    #         run_cfg[arg] = args[arg]
+
+    # Update config with values from command-line args
+    for k in cfg['data']:
+        if k in args and args[k] is not None:
+            cfg['data'][k] = args[k]
+    for k in cfg['train']:
+        if k in args and args[k] is not None:
+            cfg['train'][k] = args[k]
+    if cfg['train']['augment_pipeline'] == 'ncus':
+        aug_params = cfg['augment']['ncus']
+        for k in aug_params:
+            if k in args and args[k] is not None:
+                aug_params[k] = args[k]
+        cfg['augment']['ncus'] = aug_params
 
     # Verify experiment type
     experiment_type = run_cfg['experiment']
