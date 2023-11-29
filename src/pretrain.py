@@ -26,7 +26,7 @@ else:
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('--method', required=False, default='', type=str, help='SSL Pre-training method')
+    parser.add_argument('--method', required=False, type=str, help='SSL Pre-training method')
     parser.add_argument('--image_dir', required=False, default='', type=str, help='Root directory containing images')
     parser.add_argument('--splits_dir', required=False, default='', type=str, help='Root directory containing splits information')
     parser.add_argument('--world_size', default=1, type=int, help='Number of distributed processes')
@@ -44,8 +44,9 @@ if __name__ == '__main__':
     parser.add_argument('--us_mode', required=False, type=str, help='US mode. Either "bmode" or "mmode".')
     parser.add_argument('--min_crop_area', required=False, type=float, help='Min crop fraction for NCUS augmentations')
     parser.add_argument('--max_crop_area', required=False, type=float, help='Max crop fraction for NCUS augmentations')
-    parser.add_argument('--min_crop_ratio', required=False, type=float, help='Min crop aspect ratiofor NCUS augmentations')
+    parser.add_argument('--min_crop_ratio', required=False, type=float, help='Min crop aspect ratio for NCUS augmentations')
     parser.add_argument('--max_crop_ratio', required=False, type=float, help='Max crop aspect ratio for NCUS augmentations')
+    parser.add_argument('--blur_prob', required=False, type=float, help='Chance of applying random blur for NCUS augmentations')
     parser.add_argument('--height', required=False, type=int, help='Image height')
     parser.add_argument('--width', required=False, type=int, help='Image width')
     args = vars(parser.parse_args())

@@ -105,6 +105,7 @@ def train_classifier(
         pos_weight = torch.tensor(train_ds.dataset.label_freqs[0] / train_ds.dataset.label_freqs[1]).cuda()
         print("POS WEIGHT", pos_weight)
         loss_fn = BCEWithLogitsLoss(pos_weight=pos_weight)
+        loss_fn = BCEWithLogitsLoss() # REMOVE
     else:
         class_weights = torch.tensor(np.reciprocal(train_ds.dataset.label_freqs) / 2.).cuda()
         loss_fn = CrossEntropyLoss(weight=class_weights)
@@ -588,6 +589,7 @@ if __name__ == '__main__':
     parser.add_argument('--width', required=False, type=int, help='Image width')
     parser.add_argument('--epochs', required=False, type=int, help='Number of epochs')
     parser.add_argument('--batch_size', required=False, type=int, help='Batch size')
+    parser.add_argument('--prop_train', required=False, type=float, help='Fraction of training set to use, in [0, 1]')
     parser.add_argument('--lr_extractor', required=False, type=float, help='Learning rate for feature extractor')
     parser.add_argument('--lr_head', required=False, type=float, help='Learning rate for model head')
     parser.add_argument('--extractor_type', required=False, type=str, help='Architecture of feature extractor')
