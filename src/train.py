@@ -99,16 +99,24 @@ def train_classifier(
         writer: SummaryWriter,
         test_eval: bool = False,
         class_thresh: float = 0.5,
-        metric_of_interest: str = "loss"
+        metric_of_interest: str = "loss",
+        use_class_weights: bool = False
 ):
+    # Define loss function
     if n_classes == 2:
-        pos_weight = torch.tensor(train_ds.dataset.label_freqs[0] / train_ds.dataset.label_freqs[1]).cuda()
-        print("POS WEIGHT", pos_weight)
-        loss_fn = BCEWithLogitsLoss(pos_weight=pos_weight)
-        loss_fn = BCEWithLogitsLoss() # REMOVE
+        if use_class_weights:
+            pos_weight = torch.tensor(train_ds.dataset.label_freqs[0] / train_ds.dataset.label_freqs[1]).cuda()
+            print("POS WEIGHT", pos_weight)
+            loss_fn = BCEWithLogitsLoss(pos_weight=pos_weight)
+        else:
+            loss_fn = BCEWithLogitsLoss()
     else:
-        class_weights = torch.tensor(np.reciprocal(train_ds.dataset.label_freqs) / 2.).cuda()
-        loss_fn = CrossEntropyLoss(weight=class_weights)
+        if use_class_weights:
+            class_weights = torch.tensor(np.reciprocal(train_ds.dataset.label_freqs) / 2.).cuda()
+            loss_fn = CrossEntropyLoss(weight=class_weights)
+        else:
+            loss_fn = CrossEntropyLoss()
+
     scaler = torch.cuda.amp.GradScaler()
     log_interval = args["log_interval"]
     batches_per_epoch = len(train_ds)
