@@ -135,16 +135,16 @@ if __name__ == '__main__':
 
     use_wandb = wandb_cfg["mode"] == "online"
     resume_id = wandb_cfg["resume_id"]
-    if use_wandb:
-        run_cfg = {
-            'seed': seed
-        }
-        run_cfg.update(cfg['data'])
-        run_cfg.update(cfg['pretrain'])
-        run_cfg = {k.lower(): v for k, v in run_cfg.items()}
-        run_cfg.update(hparams)
-        run_cfg.update({"batches_per_epoch": batches_per_epoch})
 
+    run_cfg = {
+        'seed': seed
+    }
+    run_cfg.update(cfg['data'])
+    run_cfg.update(cfg['pretrain'])
+    run_cfg = {k.lower(): v for k, v in run_cfg.items()}
+    run_cfg.update(hparams)
+    run_cfg.update({"batches_per_epoch": batches_per_epoch})
+    if use_wandb:
         wandb_run = wandb.init(
             project=wandb_cfg['project'],
             job_type=f"pretrain",
@@ -161,7 +161,7 @@ if __name__ == '__main__':
         model_artifact = None
 
     # Define the base loss and initialize any regularizers
-    if method.lower() in ['simclr']:
+    if method.lower() in ['simclr', 'ncus_simclr']:
         loss_fn = SimCLRLoss(tau=hparams["tau"], distributed=(world_size > 1)).cuda()
     elif method.lower() in ['barlow_twins', 'ncus_barlow_twins']:
         loss_fn = BarlowTwinsLoss(batch_size, lambda_=hparams["lambda_"], distributed=(world_size > 1)).cuda()
@@ -212,11 +212,11 @@ if __name__ == '__main__':
         checkpoint_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     checkpoint_dir = os.path.join(cfg['paths']['model_weights'], 'pretrained', method,
                                   us_mode + checkpoint_name)
+    os.makedirs(checkpoint_dir, exist_ok=True)
     print(f"Checkpoint Dir: {checkpoint_dir}")
     run_cfg_path = os.path.join(checkpoint_dir, "run_cfg.json")
-    # with open(run_cfg_path, "w") as f:
-    #     config_str = json.dumps(run_cfg)
-    #     json.dump(config_str, f)
+    with open(run_cfg_path, 'w') as f:
+        json.dump(run_cfg, f)
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     log_dir = os.path.join(checkpoint_dir, "logs")
@@ -258,11 +258,11 @@ if __name__ == '__main__':
 
             # Log the loss and pertinent metrics.
             batch_dur = time.time() - start_time
-            scalars = {"loss": loss, "lr": scheduler.get_lr()[0], "epoch": int(epoch)}
+            scalars = {"epoch": int(epoch), "loss": loss, "lr": scheduler.get_lr()[0]}
             scalars.update(loss_fn.get_instance_vars())
             if global_step % log_interval == 0:
                 log_scalars("train", scalars, global_step, writer, use_wandb)
-                print(f"Step {epoch_step + 1}/{batches_per_epoch}: " +
+                print(f"Step {epoch_step}/{batches_per_epoch}: " +
                       ", ".join([f"{m}: {scalars[m]:.4f}" for m in scalars]) +
                       f", time: {batch_dur:.3f}, rank: {rank}")
 
@@ -270,7 +270,6 @@ if __name__ == '__main__':
         if val_ds:
             if world_size > 1:
                 dist.barrier()
-            #model = model.to('cpu')
             model.eval()
             with torch.no_grad():
                 val_scalars = {"loss": 0.}

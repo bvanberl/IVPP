@@ -1,35 +1,35 @@
 paths:
-  images: "data/bmodes"
-  splits: "splits"
+  images: "/data/mmodes"
+  splits: "/splits"
   model_weights: "results/models"
 
 data:
   height: 224
-  width: 224
+  width: 112
   min_pixel_value: 0.0
   max_pixel_value: 255.0
   num_channels: 3
-  us_mode: 'bmode'
+  us_mode: 'mmode'
 
 pretrain:
   seed: 11
-  epochs: 300
+  epochs: 100
   batch_size: 384
   optimizer: 'lars'
   init_lr: 0.2
-  warmup_epochs: 30
+  warmup_epochs: 10
   weight_decay: 0.000001
   extractor: 'mobilenetv3'
-  proj_nodes: [1024, 1024]
+  proj_nodes: [512, 512, 512]
   use_bias: true
   imagenet_weights: true
   use_unlabelled: true
-  method: "ncus_vicreg"
+  method: "ncus_simclr"
   augment_pipeline: "ncus"
   n_cutoff_layers: 0
   hparams:
     simclr:
-      temperature: 0.1
+      tau: 0.1
     barlow_twins:
       lambda_: 0.005
     vicreg:
@@ -37,36 +37,36 @@ pretrain:
       mu: 25.0
       nu: 1.0
     ncus_vicreg:
-      lambda_: 25.0
-      mu: 25.0
-      nu: 1.0
+      lambda_: 50.0
+      mu: 18.0
+      nu: 3.0
       max_time_delta: 2.0
-      max_x_delta: 20
-      sample_weights: false
+      max_x_delta: 10
+      sample_weights: true
     ncus_barlow_twins:
       lambda_: 0.005
       max_time_delta: 3
-      max_x_delta: 20
+      max_x_delta: 0
       sample_weights: true
     ncus_simclr:
-      temperature: 0.5
+      tau: 0.1
       max_time_delta: 1.0
-      max_x_delta: 20
-      sample_weights: true
+      max_x_delta: 5
+      sample_weights: false
 
 train:
-  experiment: 'fine-tune'
+  experiment: 'linear' #'fine-tune'
   folds: 5
   seed: 1
   extractor_type: 'mobilenetv3'
-  label: 'ab_lines_label'
+  label: 'lung_sliding_label'
   prop_train: 1.0
   extractor_weights: 'final_model.pth' #'imagenet'
   batch_size: 384
   n_cutoff_layers: 0
   epochs: 10
   lr_extractor: 0.00001
-  lr_head: 0.0001
+  lr_head: 0.001 #0.0001
   momentum: 0.9
   weight_decay: 0.0001
   mlp_hidden_layers: [32]
@@ -76,14 +76,14 @@ train:
 
 augment:
   ncus:
-    min_crop_area: 0.4 #0.7
+    min_crop_area: 0.4
     max_crop_area: 1.0
-    min_crop_ratio: 0.75 #0.33333333
-    max_crop_ratio: 1.333333 #0.5
+    min_crop_ratio: 0.33333333
+    max_crop_ratio: 0.5
     brightness_prob: 0.5
     max_brightness: 0.25
     contrast_prob: 0.7
     max_contrast: 0.25
-    blur_prob: 0.2
+    blur_prob: 0 #0.2
     min_blur_sigma: 0.1
     max_blur_sigma: 2.0

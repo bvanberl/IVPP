@@ -97,7 +97,7 @@ def prepare_pretrain_dataset(
         width,
         **preprocess_kwargs["augmentation"]
     )
-    if pretrain_method in ["ncus_barlow_twins", "ncus_vicreg"]:
+    if pretrain_method in ["ncus_barlow_twins", "ncus_vicreg", "ncus_simclr"]:
         if us_mode == 'mmode':
             dataset = NCUSMmodeDataset(
                 file_df,
@@ -494,10 +494,10 @@ def load_data_supervised(cfg: dict,
                 train_frames_df = pd.concat([train_frames_df, fold_df], axis=0)
 
     # For the lung sliding task, take only the brightest image from the original video
-    # if label_col == 'lung_sliding_label':
-    #     train_frames_df = train_frames_df.loc[train_frames_df['brightness_rank'] == 0]
-    #     val_frames_df = val_frames_df.loc[val_frames_df['brightness_rank'] == 0]
-    #     test_frames_df = test_frames_df.loc[test_frames_df['brightness_rank'] == 0]
+    if label_col == 'lung_sliding_label':
+        train_frames_df = train_frames_df.loc[train_frames_df['brightness_rank'] == 0]
+        val_frames_df = val_frames_df.loc[val_frames_df['brightness_rank'] == 0]
+        test_frames_df = test_frames_df.loc[test_frames_df['brightness_rank'] == 0]
 
     n_classes = train_frames_df[label_col].nunique()
     train_set = prepare_labelled_dataset(

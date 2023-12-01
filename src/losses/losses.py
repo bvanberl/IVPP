@@ -27,7 +27,7 @@ class SimCLRLoss(nn.Module):
         self.tau = tau
         self.distributed = distributed
         self.contrastive_accuracy = 0.
-        self.LARGE_CONST = 1e9
+        self.LARGE_NUM = 1e9
 
     def forward(
             self,

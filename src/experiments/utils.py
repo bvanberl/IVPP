@@ -105,7 +105,10 @@ def restore_extractor(
         for name, param in extractor.named_parameters():
             if any(name.startswith(prefix) for prefix in freeze_prefix):
                 param.requires_grad = False
-    pretrain_method = state_dict["pretrain_method"]
+    if "pretrain_method" in state_dict.keys():
+        pretrain_method = state_dict["pretrain_method"]
+    else:
+        pretrain_method = "unknown"
     return extractor, pretrain_method
 
 def normal_init_linear(

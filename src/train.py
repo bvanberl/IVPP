@@ -100,7 +100,7 @@ def train_classifier(
         test_eval: bool = False,
         class_thresh: float = 0.5,
         metric_of_interest: str = "loss",
-        use_class_weights: bool = False
+        use_class_weights: bool = True
 ):
     # Define loss function
     if n_classes == 2:
