@@ -68,6 +68,7 @@ def prepare_pretrain_dataset(
         channels: int = 1,
         n_workers: int = 0,
         world_size: int = 1,
+        drop_last: bool = False,
         **preprocess_kwargs
 ) -> DataLoader:
     '''
@@ -85,6 +86,7 @@ def prepare_pretrain_dataset(
     :param max_time_delta: Maximum temporal separation of two frames
     :param n_workers: Number of workers for preloading batches
     :param world_size: Number of processes. If 1, then not using distributed mode
+    :param drop_last: If True, drops the last batch in the data loader if smaller than the batch size
     :param preprocess_kwargs: Keyword arguments for preprocessing
     :return: A batched dataset ready for iterating over preprocessed batches
     '''
@@ -142,6 +144,7 @@ def prepare_pretrain_dataset(
         shuffle=shuffle,
         num_workers=n_workers,
         pin_memory=True,
+        drop_last=drop_last,
         sampler=sampler
     )
     return data_loader
@@ -188,7 +191,14 @@ def get_video_dataset_from_frames(
             return "/".join(path.split("/")[:-1])
 
     frames_df["clip_dir"] = frames_df["filepath"].apply(lambda path: get_clip_dir(path))
-    frames_df.head()
+
+    # Take top 50% of brightest M-modes to maximize chances they intersect the pleural line
+    if 'brightness_rank' in frames_df.columns:
+        frames_df['img_idx'] = (frames_df['filepath'].str[-9:-4]).astype(int)
+        frames_df['mmode_count'] = frames_df.groupby('clip_dir')['clip_dir'].transform('count')
+        frames_df = frames_df.loc[frames_df['brightness_rank'] < frames_df['mmode_count'] // 2]
+        agg_dict.update({'img_idx': lambda x: list(x), 'mmode_count': 'first'})
+
     new_video_df = frames_df.groupby("clip_dir").agg(agg_dict).reset_index()
     new_video_df.rename(columns={"filepath": "n_frames"}, inplace=True)
     new_video_df = new_video_df.merge(clips_df[["id"] + clip_columns], how="left", on="id")
@@ -196,7 +206,6 @@ def get_video_dataset_from_frames(
         min_n_frames = new_video_df["n_frames"].min()
         copies = (new_video_df["n_frames"] / min_n_frames).astype(int).tolist()
         new_video_df = new_video_df.loc[new_video_df.index.repeat(copies)].reset_index(drop=True)
-
     return new_video_df
 
 
@@ -302,6 +311,7 @@ def load_data_for_pretrain(
         channels=channels,
         world_size=world_size,
         n_workers=n_workers,
+        drop_last=True
         **preprocess_kwargs
     )
     if val_frames_df.shape[0] > 0:
@@ -314,10 +324,11 @@ def load_data_for_pretrain(
             width,
             height,
             augment_pipeline="none",
-            shuffle=False,
+            shuffle=True,
             channels=channels,
             distributed=False,
             n_workers=n_workers,
+            drop_last=False,
             **preprocess_kwargs
         )
     else:
@@ -470,7 +481,6 @@ def load_data_supervised(cfg: dict,
 
     if fold is None:
         train_frames_df = pd.read_csv(os.path.join(splits_dir, f'train_set_{image_fn_suffix}.csv'))
-        train_frames_df = train_frames_df.sample(frac=1.0, random_state=seed)
         if percent_train < 1.0:
             n_train_examples = int(percent_train * train_frames_df.shape[0])
             train_frames_df = train_frames_df.iloc[:n_train_examples]
@@ -495,9 +505,15 @@ def load_data_supervised(cfg: dict,
 
     # For the lung sliding task, take only the brightest image from the original video
     if label_col == 'lung_sliding_label':
-        train_frames_df = train_frames_df.loc[train_frames_df['brightness_rank'] == 0]
-        val_frames_df = val_frames_df.loc[val_frames_df['brightness_rank'] == 0]
-        test_frames_df = test_frames_df.loc[test_frames_df['brightness_rank'] == 0]
+        train_frames_df['mmode_count'] = train_frames_df.groupby(['id', 'miniclip_num'])['miniclip_num'].transform('count')
+        val_frames_df['mmode_count'] = val_frames_df.groupby(['id', 'miniclip_num'])['miniclip_num'].transform('count')
+        test_frames_df['mmode_count'] = test_frames_df.groupby(['id', 'miniclip_num'])['miniclip_num'].transform('count')
+        train_frames_df = train_frames_df.loc[train_frames_df['brightness_rank'] < train_frames_df['mmode_count'] // 2]
+        val_frames_df = val_frames_df.loc[val_frames_df['brightness_rank'] < val_frames_df['mmode_count'] // 2]
+        test_frames_df = test_frames_df.loc[test_frames_df['brightness_rank'] < test_frames_df['mmode_count'] // 2]
+        # train_frames_df = train_frames_df.loc[train_frames_df['brightness_rank'] == 0]
+        # val_frames_df = val_frames_df.loc[val_frames_df['brightness_rank'] == 0]
+        # test_frames_df = test_frames_df.loc[test_frames_df['brightness_rank'] == 0]
 
     n_classes = train_frames_df[label_col].nunique()
     train_set = prepare_labelled_dataset(

@@ -212,7 +212,7 @@ class NCUSMmodeDataset(NCUSDataset):
     ):
         """
         :param video_records: DataFrame containing at least the following columns:
-               'clip_dir', 'id', 'n_frames', 'fps'.
+               'clip_dir', 'id', 'n_frames', 'fps', 'brightness_rank'.
         :param img_root_dir: The root directory for all images
         :param channels: Number of channels in each image
         :param max_x_delta: Maximum horizontal distance, in pixels, between
@@ -234,6 +234,8 @@ class NCUSMmodeDataset(NCUSDataset):
             img_ext=img_ext
         )
         self.max_x_delta = max_x_delta
+        self.img_idxs = video_records['img_idx'].tolist()
+        self.mmode_counts = video_records['mmode_count'].tolist()
 
     def _get_image_idxs_and_sw(self, clip_idx) -> (int, int, float):
         """
@@ -247,13 +249,15 @@ class NCUSMmodeDataset(NCUSDataset):
         :return: (image index of first image, image index of second image,
                   sample weight)
         """
-        n_frames = self.frame_counts[clip_idx]
+        n_frames = self.mmode_counts[clip_idx]
+        idx_list = self.img_idxs[clip_idx]
         
         # Sample two images that are separated by no more than a threshold
-        img_idx1 = np.random.randint(0, n_frames, dtype=int)
+        img_idx1 = np.random.choice(idx_list)
         idx2_min = np.maximum(0, img_idx1 - self.max_x_delta)
         idx2_max = np.minimum(img_idx1 + self.max_x_delta, n_frames - 1)
-        img_idx2 = np.random.randint(idx2_min, idx2_max + 1, dtype=int)
+        idx2_choices = [i for i in list(range(idx2_min, idx2_max + 1)) if i in idx_list]
+        img_idx2 = np.random.choice(idx2_choices)
 
         # Calculate sample weight
         x_delta = np.abs(img_idx2 - img_idx1)
