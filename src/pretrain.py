@@ -95,8 +95,8 @@ if __name__ == '__main__':
         augment_pipeline = args["augment_pipeline"]
     else:
         augment_pipeline = cfg['pretrain']['augment_pipeline']
-    if augment_pipeline == 'ncus':
-        aug_params = cfg['augment']['ncus']
+    if augment_pipeline in ['ncus', 'uscl']:
+        aug_params = cfg['augment'][augment_pipeline]
         for k in aug_params:
             if k in args and args[k] is not None:
                 aug_params[k] = args[k]

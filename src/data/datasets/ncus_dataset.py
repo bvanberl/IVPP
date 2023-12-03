@@ -262,5 +262,6 @@ class NCUSMmodeDataset(NCUSDataset):
         # Calculate sample weight
         x_delta = np.abs(img_idx2 - img_idx1)
         sw = (self.max_x_delta - x_delta + 1.) / (self.max_x_delta + 1.)
+        #sw = 1. - (self.max_x_delta - x_delta) / (self.max_x_delta + 1.)
 
         return img_idx1, img_idx2, sw

@@ -41,7 +41,7 @@ pretrain:
       mu: 25.0
       nu: 1.0
       max_time_delta: 2.0
-      max_x_delta: 5
+      max_x_delta: 15
       sample_weights: true
     ncus_barlow_twins:
       lambda_: 0.005
@@ -66,24 +66,29 @@ train:
   n_cutoff_layers: 0
   epochs: 10
   lr_extractor: 0.00001
-  lr_head: 0.001 #0.0001
+  lr_head: 0.0001 #0.0001
   momentum: 0.9
   weight_decay: 0.0001
   mlp_hidden_layers: [32]
   freeze_prefix: [] #["layer1", "layer2", "layer3", "layer4.0"] #["layer1", "layer2", "layer3.0"] #, "layer4.0"]
   optimizer: "adam"
-  augment_pipeline: "ncus"
+  augment_pipeline: "none"
 
 augment:
   ncus:
-    min_crop_area: 0.4
+    min_crop_area: 0.7 #0.4
     max_crop_area: 1.0
-    min_crop_ratio: 0.33333333
-    max_crop_ratio: 0.5
-    brightness_prob: 0.5
+    min_crop_ratio: 0.4 #0.33333333
+    max_crop_ratio: 0.6 #0.5
+    brightness_prob: 0.7
     max_brightness: 0.25
     contrast_prob: 0.7
     max_contrast: 0.25
     blur_prob: 0 #0.2
     min_blur_sigma: 0.1
     max_blur_sigma: 2.0
+  uscl:
+    min_crop_area: 0.8
+    max_crop_area: 1.0
+    min_crop_ratio: 0.33333 # 0.8
+    max_crop_ratio: 0.5 # 1.25

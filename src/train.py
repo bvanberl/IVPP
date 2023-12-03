@@ -336,8 +336,8 @@ def single_train(run_cfg):
 
     # Freeze extractor if using linear eval
     if experiment_type in ['linear', 'mlp']:
-        for param in extractor.parameters():
-            param.requires_grad = False
+        extractor.requires_grad_(False)
+        extractor.eval()
     if experiment_type == 'mlp':
         fc_nodes = run_cfg['mlp_hidden_layers']
     else:
@@ -582,7 +582,7 @@ if __name__ == '__main__':
     parser.add_argument('--dist_backend', default='gloo', type=str, help='Backend for distributed package')
     parser.add_argument('--log_interval', default=20, type=int, help='Number of steps after which to log')
     parser.add_argument('--test_eval', required=False, type=str, default='N', help='Evaluate on test set')
-    parser.add_argument('--augment_pipeline', required=False, type=str, default="ncus", help='Augmentation pipeline')
+    parser.add_argument('--augment_pipeline', required=False, type=str, help='Augmentation pipeline')
     parser.add_argument('--label', required=False, type=str, default="label", help='Label column name')
     parser.add_argument('--num_workers', required=False, type=int, default=0, help='Number of workers for data loading')
     parser.add_argument('--seed', required=False, type=int, help='Random seed')
@@ -629,12 +629,13 @@ if __name__ == '__main__':
     for k in cfg['train']:
         if k in args and args[k] is not None:
             cfg['train'][k] = args[k]
-    if cfg['train']['augment_pipeline'] == 'ncus':
-        aug_params = cfg['augment']['ncus']
+    aug_pipeline = cfg['train']['augment_pipeline']
+    if aug_pipeline in ['uscl', 'ncus']:
+        aug_params = cfg['augment'][aug_pipeline]
         for k in aug_params:
             if k in args and args[k] is not None:
                 aug_params[k] = args[k]
-        cfg['augment']['ncus'] = aug_params
+        cfg['augment'][aug_pipeline] = aug_params
 
     # Verify experiment type
     experiment_type = run_cfg['experiment']

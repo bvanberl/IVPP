@@ -311,7 +311,7 @@ def load_data_for_pretrain(
         channels=channels,
         world_size=world_size,
         n_workers=n_workers,
-        drop_last=True
+        drop_last=True,
         **preprocess_kwargs
     )
     if val_frames_df.shape[0] > 0:
@@ -481,9 +481,11 @@ def load_data_supervised(cfg: dict,
 
     if fold is None:
         train_frames_df = pd.read_csv(os.path.join(splits_dir, f'train_set_{image_fn_suffix}.csv'))
+
+        # If evaluating on fewer training examples, take percent_train * N random training examples.
         if percent_train < 1.0:
             n_train_examples = int(percent_train * train_frames_df.shape[0])
-            train_frames_df = train_frames_df.iloc[:n_train_examples]
+            train_frames_df = train_frames_df.sample(frac=1.0).iloc[:n_train_examples]
 
         val_frames_path = os.path.join(splits_dir, f'val_set_{image_fn_suffix}.csv')
         val_frames_df = pd.read_csv(val_frames_path) if os.path.exists(val_frames_path) else pd.DataFrame()
