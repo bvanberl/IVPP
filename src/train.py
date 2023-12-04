@@ -100,7 +100,7 @@ def train_classifier(
         test_eval: bool = False,
         class_thresh: float = 0.5,
         metric_of_interest: str = "loss",
-        use_class_weights: bool = True
+        use_class_weights: bool = False
 ):
     # Define loss function
     if n_classes == 2:
@@ -359,6 +359,7 @@ def single_train(run_cfg):
     lr_head = run_cfg['lr_head']
     weight_decay = run_cfg['weight_decay']
     momentum = run_cfg['momentum']
+    use_class_weights = bool(run_cfg['use_class_weights'])
     param_groups = [dict(params=head.parameters(), lr=lr_head)]
     if experiment_type == "fine-tune":
         param_groups.append(dict(params=extractor.parameters(), lr=lr_extractor))
@@ -382,7 +383,8 @@ def single_train(run_cfg):
         checkpoint_path,
         writer,
         run_test,
-        metric_of_interest=priority_metric
+        metric_of_interest=priority_metric,
+        use_class_weights=use_class_weights
     )
 
 
@@ -523,6 +525,7 @@ def kfold_cross_validation(run_cfg):
         lr_head = run_cfg['lr_head']
         weight_decay = run_cfg['weight_decay']
         momentum = run_cfg['momentum']
+        use_class_weights = bool(run_cfg['use_class_weights'])
         param_groups = [dict(params=head.parameters(), lr=lr_head)]
         if experiment_type == "fine-tune":
             param_groups.append(dict(params=extractor.parameters(), lr=lr_extractor))
@@ -546,7 +549,8 @@ def kfold_cross_validation(run_cfg):
             checkpoint_path,
             writer,
             True,
-            metric_of_interest=priority_metric
+            metric_of_interest=priority_metric,
+            use_class_weights=use_class_weights
         )
         if i == 1:
             test_metrics = {m: [fold_test_metrics[m]] for m in fold_test_metrics}
@@ -585,10 +589,12 @@ if __name__ == '__main__':
     parser.add_argument('--augment_pipeline', required=False, type=str, help='Augmentation pipeline')
     parser.add_argument('--label', required=False, type=str, default="label", help='Label column name')
     parser.add_argument('--num_workers', required=False, type=int, default=0, help='Number of workers for data loading')
+    parser.add_argument('--batch_size', required=False, type=int, help='Number of workers for data loading')
     parser.add_argument('--seed', required=False, type=int, help='Random seed')
     parser.add_argument('--checkpoint_name', required=False, type=str, default=None, help='Checkpoint folder name')
     parser.add_argument('--priority_metric', required=False, type=str, help='Metric to prioritize in model evaluation')
     parser.add_argument('--us_mode', required=False, type=str, help='US mode. Either "bmode" or "mmode".')
+    parser.add_argument('--extractor', required=False, type=str, help='Feature extractor.') ^ M
     parser.add_argument('--min_crop_area', required=False, type=float, help='Min crop fraction for NCUS augmentations')
     parser.add_argument('--max_crop_area', required=False, type=float, help='Max crop fraction for NCUS augmentations')
     parser.add_argument('--min_crop_ratio', required=False, type=float, help='Min crop aspect ratiofor NCUS augmentations')
@@ -602,6 +608,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr_head', required=False, type=float, help='Learning rate for model head')
     parser.add_argument('--extractor_type', required=False, type=str, help='Architecture of feature extractor')
     parser.add_argument('--freeze_prefix', nargs='*', default=[], help='Prefixes for layers we wish to freeze')
+    parser.add_argument('--use_class_weights', type=int, required=False, default=None, help='If 0, no class weights. If 1, class weights.')
     args = vars(parser.parse_args())
 
     torch.manual_seed(cfg['train']['seed'])

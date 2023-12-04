@@ -13,14 +13,14 @@ data:
 
 pretrain:
   seed: 11
-  epochs: 100
+  epochs: 300
   batch_size: 384
   optimizer: 'lars'
   init_lr: 0.2
-  warmup_epochs: 10
+  warmup_epochs: 30
   weight_decay: 0.000001
   extractor: 'mobilenetv3'
-  proj_nodes: [1024, 512]
+  proj_nodes: [1024, 1024]
   use_bias: true
   imagenet_weights: true
   use_unlabelled: true
@@ -55,7 +55,7 @@ pretrain:
       sample_weights: false
 
 train:
-  experiment: 'linear' #'fine-tune'
+  experiment: 'fine-tune' #'fine-tune'
   folds: 5
   seed: 1
   extractor_type: 'mobilenetv3'
@@ -72,7 +72,8 @@ train:
   mlp_hidden_layers: [32]
   freeze_prefix: [] #["layer1", "layer2", "layer3", "layer4.0"] #["layer1", "layer2", "layer3.0"] #, "layer4.0"]
   optimizer: "adam"
-  augment_pipeline: "none"
+  augment_pipeline: "ncus"
+  use_class_weights: false
 
 augment:
   ncus:

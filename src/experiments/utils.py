@@ -115,7 +115,7 @@ def normal_init_linear(
         in_dim: int,
         out_dim: int,
         w_mean: float = 0.,
-        w_std: float = 0.
+        w_std: float = 0.01
 ):
     """
     Initializes a fully connected layer with weights randomly
