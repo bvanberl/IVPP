@@ -275,8 +275,8 @@ def single_train(run_cfg):
     height = run_cfg['height']
     width = run_cfg['width']
     augment_pipeline = run_cfg['augment_pipeline']
-    if augment_pipeline == 'ncus':
-        augment_kwargs = {k.lower(): v for k, v in cfg['augment']['ncus'].items()}
+    if augment_pipeline in ['ncus', 'uscl']:
+        augment_kwargs = {k.lower(): v for k, v in cfg['augment'][augment_pipeline].items()}
     else:
         augment_kwargs = {}
     img_dim = (channels, height, width)
@@ -589,12 +589,11 @@ if __name__ == '__main__':
     parser.add_argument('--augment_pipeline', required=False, type=str, help='Augmentation pipeline')
     parser.add_argument('--label', required=False, type=str, default="label", help='Label column name')
     parser.add_argument('--num_workers', required=False, type=int, default=0, help='Number of workers for data loading')
-    parser.add_argument('--batch_size', required=False, type=int, help='Number of workers for data loading')
     parser.add_argument('--seed', required=False, type=int, help='Random seed')
     parser.add_argument('--checkpoint_name', required=False, type=str, default=None, help='Checkpoint folder name')
     parser.add_argument('--priority_metric', required=False, type=str, help='Metric to prioritize in model evaluation')
     parser.add_argument('--us_mode', required=False, type=str, help='US mode. Either "bmode" or "mmode".')
-    parser.add_argument('--extractor', required=False, type=str, help='Feature extractor.') ^ M
+    parser.add_argument('--extractor', required=False, type=str, help='Feature extractor.')
     parser.add_argument('--min_crop_area', required=False, type=float, help='Min crop fraction for NCUS augmentations')
     parser.add_argument('--max_crop_area', required=False, type=float, help='Max crop fraction for NCUS augmentations')
     parser.add_argument('--min_crop_ratio', required=False, type=float, help='Min crop aspect ratiofor NCUS augmentations')

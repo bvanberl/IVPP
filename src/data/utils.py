@@ -339,7 +339,6 @@ def load_data_for_pretrain(
 
 def prepare_labelled_dataset(image_df: pd.DataFrame,
                              img_root: str,
-                             us_mode: str,
                              height: int,
                              width: int,
                              batch_size: int,
@@ -357,7 +356,6 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
     :param image_df: A table of image properties. Each row corresponds to an US image.
                      Must contain "filepath" and label_col columns
     :param img_root: Root directory containing images
-    :param us_mode: US mode ("bmode" or "mmode")
     :param height: Image height
     :param width: Image width
     :param batch_size: Batch size for pretraining
@@ -521,7 +519,6 @@ def load_data_supervised(cfg: dict,
     train_set = prepare_labelled_dataset(
         train_frames_df,
         data_dir,
-        us_mode,
         height,
         width,
         batch_size,
@@ -536,7 +533,6 @@ def load_data_supervised(cfg: dict,
     val_set = prepare_labelled_dataset(
         val_frames_df,
         data_dir,
-        us_mode,
         height,
         width,
         batch_size,
@@ -550,7 +546,6 @@ def load_data_supervised(cfg: dict,
     test_set = prepare_labelled_dataset(
         test_frames_df,
         data_dir,
-        us_mode,
         height,
         width,
         batch_size,

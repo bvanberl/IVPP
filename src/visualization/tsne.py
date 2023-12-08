@@ -72,7 +72,6 @@ def get_features(
         ds = prepare_labelled_dataset(
             image_df,
             image_dir,
-            us_mode,
             height,
             width,
             batch_size,

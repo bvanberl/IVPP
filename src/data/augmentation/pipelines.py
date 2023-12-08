@@ -87,6 +87,10 @@ def get_supervised_bmode_augmentions(
 def get_uscl_augmentations(
     height: int,
     width: int,
+    min_crop_area: float = 0.8,
+    max_crop_area: float = 1.0,
+    min_crop_ratio: float = 0.8,
+    max_crop_ratio: float = 1.25,
     mean_pixel_val: List[float] = None,
     std_pixel_val: List[float] = None,
 ):
@@ -95,16 +99,22 @@ def get_uscl_augmentations(
     Same pipeline as used in USCL: https://arxiv.org/pdf/2011.13066.pdf
     :param height: Image height
     :param width: Image width
-    :param brightness_delta: Maximum brightness increase/decrease, in [0, 1]
-    :param contrast_low: Lower bound for contrast transformation
-    :param contrast_high: Upper bound for contrast transformation
+    :param min_crop_area: Minimum area of cropped region
+    :param max_crop_area: Maximum area of cropped region
+    :param min_crop_ratio: Minimum aspect ratio (w:h) for cropped region
+    :param max_crop_ratio: Maximum aspect ratio (w:h) for cropped region
     :param mean_pixel_val: Channel-wise means
     :param std_pixel_val: Channel-wise standard deviation
     :return: Callable augmentation pipeline
     """
     return v2.Compose([
         v2.ToImage(),
-        v2.RandomResizedCrop((height, width), scale=(0.8, 1.0), ratio=(0.8, 1.25), antialias=True),
+        v2.RandomResizedCrop(
+            (height, width),
+            scale=(min_crop_area, max_crop_area),
+            ratio=(min_crop_ratio, max_crop_ratio),
+            antialias=True
+        ),
         v2.RandomHorizontalFlip(p=0.5),
         v2.ToDtype(torch.float32, scale=True),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
