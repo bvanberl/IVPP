@@ -348,9 +348,9 @@ def single_train(run_cfg):
     h_dim = extractor(torch.randn((1,) + img_dim)).shape[-1]
     head = get_classifier_head(h_dim, fc_nodes, n_classes)
     classifier = Sequential(extractor, head).cuda()
+    print(classifier)
     torchsummary.summary(extractor, input_size=(channels, width, height))
     torchsummary.summary(head, input_size=(h_dim,))
-    print(classifier)
 
     # Define an optimizer that assigns different learning rates to the
     # extractor and head.
@@ -606,7 +606,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr_extractor', required=False, type=float, help='Learning rate for feature extractor')
     parser.add_argument('--lr_head', required=False, type=float, help='Learning rate for model head')
     parser.add_argument('--extractor_type', required=False, type=str, help='Architecture of feature extractor')
-    parser.add_argument('--freeze_prefix', nargs='*', default=[], help='Prefixes for layers we wish to freeze')
+    parser.add_argument('--freeze_prefix', nargs='*', required=False, help='Prefixes for layers we wish to freeze')
     parser.add_argument('--use_class_weights', type=int, required=False, default=None, help='If 0, no class weights. If 1, class weights.')
     args = vars(parser.parse_args())
 

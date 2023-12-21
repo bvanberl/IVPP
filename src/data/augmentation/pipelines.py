@@ -202,6 +202,7 @@ def get_ncus_augmentations(
         v2.RandomApply([
             v2.GaussianBlur(gauss_filter_width, (min_blur_sigma, max_blur_sigma))],
             p=blur_prob),
+        #v2.RandomErasing(p=0.5),
         v2.ToDtype(torch.float32, scale=True),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
     ])

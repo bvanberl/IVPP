@@ -3,14 +3,14 @@ from typing import Union, List
 import torch
 from torch.nn import Module, Sequential, Identity, AdaptiveAvgPool2d
 import torchvision
-from torchvision.models import resnet18, efficientnet_v2_s, \
+from torchvision.models import resnet18, efficientnet_b0, \
     mobilenet_v3_small, vgg16
 
 torchvision.disable_beta_transforms_warning()
 
 # Paths of pretrained weights
 RESNET18_WEIGHTS = "https://download.pytorch.org/models/resnet18-f37072fd.pth"
-EFFICIENTNETV2S_WEIGHTS = "https://download.pytorch.org/models/efficientnet_v2_s-dd5fe13b.pth"
+EFFICIENTNETB0_WEIGHTS = "https://download.pytorch.org/models/efficientnet_b0_rwightman-7f5810bc.pth"
 MOBILENETV3S_WEIGHTS = "https://download.pytorch.org/models/mobilenet_v3_small-047dcff4.pth"
 VGG16_WEIGHTS = "https://download.pytorch.org/models/vgg16-397923af.pth"
 
@@ -37,8 +37,8 @@ def get_extractor(
         model = get_resnet18(imagenet_weights, n_cutoff_layers)
     elif extractor_name == 'resnet14':
         model = get_resnet14(imagenet_weights, n_cutoff_layers)
-    elif extractor_name == 'efficientnetv2b0':
-        model = get_efficientnetv2s(imagenet_weights, n_cutoff_layers)
+    elif extractor_name == 'efficientnetb0':
+        model = get_efficientnetb0(imagenet_weights, n_cutoff_layers)
     elif extractor_name == 'mobilenetv3':
         model = get_mobilenetv3s(imagenet_weights, n_cutoff_layers)
     elif extractor_name == 'vgg16':
@@ -78,15 +78,15 @@ def get_resnet14(
         extractor = Sequential(*list(extractor.children())[:-(n_cutoff_layers + 1)])
     return extractor
 
-def get_efficientnetv2s(
+def get_efficientnetb0(
     imagenet_weights: bool = False,
     n_cutoff_layers: int = 0
 ) -> Module:
-    extractor = efficientnet_v2_s()
+    extractor = efficientnet_b0()
     if imagenet_weights:
-        state_dict = torch.hub.load_state_dict_from_url(EFFICIENTNETV2S_WEIGHTS)
+        state_dict = torch.hub.load_state_dict_from_url(EFFICIENTNETB0_WEIGHTS)
         extractor.load_state_dict(state_dict)
-    extractor.fc = Identity()
+    extractor.classifier = Identity()
     if n_cutoff_layers > 0:
         extractor = Sequential(*list(extractor.children())[:-(n_cutoff_layers + 1)])
     return extractor

@@ -51,7 +51,7 @@ def get_features(
     :param height: Image height
     :param width: Image width
     """
-
+    image_df = pd.read_csv(image_df_path)
     if os.path.exists(feats_path):
         print(f"Features already saved at {feats_path}")
         feats = np.load(feats_path)
@@ -65,10 +65,11 @@ def get_features(
         extractor = extractor.cuda()
         extractor.eval()
 
-        # Produce labelled dataset
-        image_df = pd.read_csv(image_df_path)
+        if label_col == 'lung_sliding_label':
+            image_df['mmode_count'] = image_df.groupby(['id', 'miniclip_num'])['miniclip_num'].transform('count')
+            image_df = image_df.loc[image_df['brightness_rank'] < image_df['mmode_count'] // 2]
+
         n_classes = image_df[label_col].nunique() - 1
-        us_mode = "mmode" if "mmode" in image_dir else "bmode"
         ds = prepare_labelled_dataset(
             image_df,
             image_dir,
@@ -94,7 +95,7 @@ def get_features(
         if not os.path.exists(feats_dir):
             os.makedirs(feats_dir)
         np.save(feats_path, feats)
-    return feats
+    return feats, image_df
 
 def plot_embedding(
         emb: np.ndarray,
@@ -127,7 +128,7 @@ def plot_embedding(
 
 def do_tsne(
         label_col: str,
-        test_df_path: str,
+        test_df: pd.DataFrame,
         feats: np.ndarray,
         save_dir: str,
         label_names: List[str]
@@ -144,7 +145,6 @@ def do_tsne(
     """
 
     print(f"Features for all examples in the dataset have shape {feats.shape}")
-    test_df = pd.read_csv(test_df_path)
     labels = test_df[label_col].to_numpy()
     labelled_indices = np.where(labels != -1)
     labels = labels[labelled_indices]
@@ -180,6 +180,6 @@ if __name__ == '__main__':
     height = args["height"]
     width = args["width"]
 
-    feats = get_features(extractor_dir, df_path, image_dir, label_col, feats_path, extractor_type=extractor_type, height=height, width=width)
+    feats, image_df = get_features(extractor_dir, df_path, image_dir, label_col, feats_path, extractor_type=extractor_type, height=height, width=width)
     plot_save_dir = os.path.dirname(feats_path)
-    do_tsne(label_col, df_path, feats, plot_save_dir, label_names)
+    do_tsne(label_col, image_df, feats, plot_save_dir, label_names)
