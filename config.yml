@@ -1,15 +1,15 @@
 paths:
-  images: "data/bmodes"
-  splits: "splits"
+  images: "parenchymal_internal/data/mmodes"
+  splits: "parenchymal_internal/splits"
   model_weights: "results/models"
 
 data:
   height: 224
-  width: 224
+  width: 112
   min_pixel_value: 0.0
   max_pixel_value: 255.0
   num_channels: 3
-  us_mode: 'bmode'
+  us_mode: 'mmode'
 
 pretrain:
   seed: 11
@@ -24,7 +24,7 @@ pretrain:
   use_bias: true
   imagenet_weights: true
   use_unlabelled: true
-  method: "ncus_simclr"
+  method: "ncus_vicreg"
   augment_pipeline: "ncus"
   n_cutoff_layers: 0
   hparams:
@@ -46,12 +46,12 @@ pretrain:
     ncus_barlow_twins:
       lambda_: 0.005
       max_time_delta: 3
-      max_x_delta: 5
+      max_x_delta: 15
       sample_weights: false
     ncus_simclr:
       tau: 0.1
       max_time_delta: 1.5
-      max_x_delta: 15
+      max_x_delta: 10
       sample_weights: true
 
 train:
@@ -82,14 +82,14 @@ augment:
     min_crop_ratio: 0.4 #0.4 #0.33333333
     max_crop_ratio: 0.6 # #0.5
     brightness_prob: 0.5
-    max_brightness: 0.25
+    max_brightness: 0.25 #25
     contrast_prob: 0.5
-    max_contrast: 0.25
+    max_contrast: 0.25 #25
     blur_prob: 0.25
     min_blur_sigma: 0.1
-    max_blur_sigma: 5.0
+    max_blur_sigma: 2.0
   uscl:
-    min_crop_area: 0.8
+    min_crop_area: 0.9
     max_crop_area: 1.0
     min_crop_ratio: 0.4 # 0.8
     max_crop_ratio: 0.6 # 1.25

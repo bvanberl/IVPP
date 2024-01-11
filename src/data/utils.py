@@ -16,6 +16,7 @@ from src.data.augmentation.pipelines import *
 
 def get_augmentation_transforms_pretrain(
         pipeline: str,
+        us_mode: str,
         height: int,
         width: int,
         **augment_kwargs
@@ -24,12 +25,14 @@ def get_augmentation_transforms_pretrain(
 
     :param pipeline: Name of pipeline.
                      One of {'byol', 'ncus', 'uscl', or 'none'}
+    :parm us_mode: Type of ultrasound exam ('bmode' or 'mmode')
     :param height: Image height
     :param width: Image width
     :param pipeline_kwargs: Pipeline keyword arguments
     :return: Augmentation pipelines for first and second images
     """
     pipeline = pipeline.lower()
+    augment_kwargs['resize_first'] = us_mode == 'mmode'
     if pipeline == "byol":
         return (
             get_byol_augmentations(height, width),
@@ -95,6 +98,7 @@ def prepare_pretrain_dataset(
     pretrain_method = pretrain_method.lower()
     augment1, augment2 = get_augmentation_transforms_pretrain(
         augment_pipeline,
+        us_mode,
         height,
         width,
         **preprocess_kwargs["augmentation"]
@@ -462,8 +466,10 @@ def load_data_supervised(cfg: dict,
 
     if us_mode == 'bmode':
         image_fn_suffix = 'frames'
+        augment_kwargs['resize_first'] = False
     elif us_mode == 'mmode':
         image_fn_suffix = 'mmodes'
+        augment_kwargs['resize_first'] = True
     else:
         raise Exception(f"Invalid US mode provided: {us_mode}")
 

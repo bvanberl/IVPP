@@ -33,22 +33,27 @@ def get_normalize_transform(
 def get_validation_scaling(
         height: int,
         width: int,
+        resize_first: bool = False,
         mean_pixel_val: List[float] = None,
         std_pixel_val: List[float] = None
 ) -> v2.Compose:
     """Defines augmentation pipeline for supervised learning experiments.
     :param height: Image height
     :param width: Image width
+    :param resize_first: If True, resize image to (height, width) before transforms
     :param mean_pixel_val: Channel-wise means
     :param std_pixel_val: Channel-wise standard deviation
     :return: Callable augmentation pipeline
     """
-    return v2.Compose([
+    transforms = [
         v2.ToImage(),
         v2.Resize((height, width), antialias=True),
         v2.ToDtype(torch.float32, scale=True),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
-    ])
+    ]
+    if resize_first:
+        transforms.insert(1, v2.Resize((height, width), antialias=True))
+    return v2.Compose(transforms)
 
 
 def get_supervised_bmode_augmentions(
@@ -87,6 +92,7 @@ def get_supervised_bmode_augmentions(
 def get_uscl_augmentations(
     height: int,
     width: int,
+    resize_first: bool = False,
     min_crop_area: float = 0.8,
     max_crop_area: float = 1.0,
     min_crop_ratio: float = 0.8,
@@ -99,6 +105,7 @@ def get_uscl_augmentations(
     Same pipeline as used in USCL: https://arxiv.org/pdf/2011.13066.pdf
     :param height: Image height
     :param width: Image width
+    :param resize_first: If True, resize image to (height, width) before transforms
     :param min_crop_area: Minimum area of cropped region
     :param max_crop_area: Maximum area of cropped region
     :param min_crop_ratio: Minimum aspect ratio (w:h) for cropped region
@@ -107,7 +114,7 @@ def get_uscl_augmentations(
     :param std_pixel_val: Channel-wise standard deviation
     :return: Callable augmentation pipeline
     """
-    return v2.Compose([
+    transforms = [
         v2.ToImage(),
         v2.RandomResizedCrop(
             (height, width),
@@ -118,11 +125,15 @@ def get_uscl_augmentations(
         v2.RandomHorizontalFlip(p=0.5),
         v2.ToDtype(torch.float32, scale=True),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
-    ])
+    ]
+    if resize_first:
+        transforms.insert(1, v2.Resize((height, width), antialias=True))
+    return v2.Compose(transforms)
 
 def get_byol_augmentations(
         height: int,
         width: int,
+        resize_first: bool = False,
         mean_pixel_val: List[float] = None,
         std_pixel_val: List[float] = None,
 ) -> v2.Compose:
@@ -132,11 +143,12 @@ def get_byol_augmentations(
     Appendix C.1, which is derived from BYOL.
     :param height: Image height
     :param width: Image width
+    :param resize_first: If True, resize image to (height, width) before transforms
     :param mean_pixel_val: Channel-wise means
     :param std_pixel_val: Channel-wise standard deviation
     :return: Callable augmentation pipeline
     """
-    return v2.Compose([
+    transforms = [
         v2.ToImage(),
         v2.RandomResizedCrop((height, width), scale=(0.08, 1.), antialias=True),
         v2.RandomHorizontalFlip(p=0.5),
@@ -145,12 +157,17 @@ def get_byol_augmentations(
         v2.RandomSolarize(0.5, p=0.1),
         v2.ToDtype(torch.float32, scale=True),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
-    ])
+    ]
+    if resize_first:
+        transforms.insert(1, v2.Resize((height, width), antialias=True))
+    return v2.Compose(transforms)
+
 
 
 def get_ncus_augmentations(
         height: int,
         width: int,
+        resize_first: bool = False,
         min_crop_area: float = 0.4,
         max_crop_area: float = 1.0,
         min_crop_ratio: float = 3. / 4.,
@@ -172,6 +189,7 @@ def get_ncus_augmentations(
     change, Gaussian blur, and horizontal flip.
     :param height: Image height
     :param width: Image width
+    :param resize_first: If True, resize image to (height, width) before transforms
     :param min_crop_area: Minimum area of cropped region
     :param max_crop_area: Maximum area of cropped region
     :param min_crop_ratio: Minimum aspect ratio (w:h) for cropped region
@@ -188,7 +206,7 @@ def get_ncus_augmentations(
     :param std_pixel_val: Channel-wise standard deviation
     :return: Callable augmentation pipeline
     """
-    return v2.Compose([
+    transforms = [
         v2.ToImage(),
         v2.RandomResizedCrop(
             (height, width),
@@ -202,7 +220,9 @@ def get_ncus_augmentations(
         v2.RandomApply([
             v2.GaussianBlur(gauss_filter_width, (min_blur_sigma, max_blur_sigma))],
             p=blur_prob),
-        #v2.RandomErasing(p=0.5),
         v2.ToDtype(torch.float32, scale=True),
         get_normalize_transform(mean_pixel_val, std_pixel_val)
-    ])
+    ]
+    if resize_first:
+        transforms.insert(1, v2.Resize((height, width), antialias=True))
+    return v2.Compose(transforms)
