@@ -14,17 +14,17 @@ import torchvision
 torchvision.disable_beta_transforms_warning()
 
 from src.data.utils import prepare_labelled_dataset
-from src.models.extractors import get_backbone
-from src.experiments.utils import restore_backbone
+from src.models.extractors import get_extractor
+from src.experiments.utils import restore_extractor
 
 def get_features(
-        backbone_path: str,
+        extractor_path: str,
         image_df_path: str,
         image_dir: str,
         label_col: str,
         feats_path: str,
         channels: int = 3,
-        backbone_type: str = "mobilenetv3",
+        extractor_type: str = "mobilenetv3",
         n_cutoff_layers: int = 0,
         batch_size: int = 256,
         height: int = 224,
@@ -32,42 +32,44 @@ def get_features(
 ):
     """Obtains predicted features for a feature extractor
 
-    Loads desired backbone (pretrained or not) and produces
+    Loads desired extractor (pretrained or not) and produces
     features for the labelled dataset saved at image_df_path.
     Saves the features as a numpy array. If features already
     exist at feats_path, loads and returns those instead.
-    :param backbone_path: Path to pretrained model. If
+    :param extractor_path: Path to pretrained model. If
         'imagenet', loads supervised pretrained weights.
     :param image_df_path: Dataset spreadsheet path
     :param image_dir: Path to directory containing images
     :param label_col: Column of spreadsheet containing label
     :param feats_path: Path at which to save features as .npy
     :param channels: Number of image channels
-    :param backbone_type: Backbone architecture to be used
+    :param extractor_type: extractor architecture to be used
         when not loading a pretrained model
     :param n_cutoff_layers: Number of layers to remove from the end of the
-        backbone model.
+        extractor model.
     :param batch_size: Batch size for prediction
     :param height: Image height
     :param width: Image width
     """
-
+    image_df = pd.read_csv(image_df_path)
     if os.path.exists(feats_path):
         print(f"Features already saved at {feats_path}")
         feats = np.load(feats_path)
     else:
         # Load feature extractor
-        if backbone_path == "imagenet":
-            backbone = get_backbone(backbone_type, True, n_cutoff_layers)
+        if extractor_path == "imagenet":
+            extractor = get_extractor(extractor_type, True, n_cutoff_layers)
         else:
-            backbone = get_backbone(backbone_type, False, n_cutoff_layers)
-            backbone, _ = restore_backbone(backbone, backbone_path)
-        backbone = backbone.cuda()
-        backbone.eval()
+            extractor = get_extractor(extractor_type, False, n_cutoff_layers)
+            extractor, _ = restore_extractor(extractor, extractor_path)
+        extractor = extractor.cuda()
+        extractor.eval()
 
-        # Produce labelled dataset
-        image_df = pd.read_csv(image_df_path)
-        n_classes = image_df[label_col].nunique()
+        if label_col == 'lung_sliding_label':
+            image_df['mmode_count'] = image_df.groupby(['id', 'miniclip_num'])['miniclip_num'].transform('count')
+            image_df = image_df.loc[image_df['brightness_rank'] < image_df['mmode_count'] // 2]
+
+        n_classes = image_df[label_col].nunique() - 1
         ds = prepare_labelled_dataset(
             image_df,
             image_dir,
@@ -84,7 +86,7 @@ def get_features(
         with torch.no_grad():
             for _, (x,_) in enumerate(tqdm(ds)):
                 x = x.cuda()
-                h = backbone.forward(x)
+                h = extractor.forward(x)
                 feats.append(h.cpu())
         feats = np.concatenate(feats, axis=0)
 
@@ -93,7 +95,7 @@ def get_features(
         if not os.path.exists(feats_dir):
             os.makedirs(feats_dir)
         np.save(feats_path, feats)
-    return feats
+    return feats, image_df
 
 def plot_embedding(
         emb: np.ndarray,
@@ -126,7 +128,7 @@ def plot_embedding(
 
 def do_tsne(
         label_col: str,
-        test_df_path: str,
+        test_df: pd.DataFrame,
         feats: np.ndarray,
         save_dir: str,
         label_names: List[str]
@@ -143,7 +145,6 @@ def do_tsne(
     """
 
     print(f"Features for all examples in the dataset have shape {feats.shape}")
-    test_df = pd.read_csv(test_df_path)
     labels = test_df[label_col].to_numpy()
     labelled_indices = np.where(labels != -1)
     labels = labels[labelled_indices]
@@ -158,23 +159,27 @@ def do_tsne(
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('--backbone', required=True, default='imagenet', type=str, help='Path to pretrained model')
-    parser.add_argument('--backbone_type', required=True, default='resnet18', type=str, help='Architecture of backbone')
+    parser.add_argument('--extractor', required=True, default='imagenet', type=str, help='Path to pretrained model')
+    parser.add_argument('--extractor_type', required=True, default='resnet18', type=str, help='Architecture of extractor')
     parser.add_argument('--df_path', required=True, type=str, help='Path to image dataset spreadsheet')
     parser.add_argument('--image_dir', required=True, type=str, help='Path to image data root directory')
     parser.add_argument('--label_col', required=True, type=str, help='Label column')
     parser.add_argument('--feats_path', required=True, type=str, help='Path at which features are saved or to be saved')
     parser.add_argument('--label_names', required=False, type=str, nargs='+', default=['negative', 'positive'], help='Class identifiers')
+    parser.add_argument('--height', required=False, type=int, default=224, help='Image height')
+    parser.add_argument('--width', required=False, type=int, default=224, help='Image width')
     args = vars(parser.parse_args())
 
-    backbone_dir = args["backbone"]
-    backbone_type = args["backbone_type"]
+    extractor_dir = args["extractor"]
+    extractor_type = args["extractor_type"]
     df_path = args["df_path"]
     image_dir = args["image_dir"]
     label_col = args["label_col"]
     feats_path = args["feats_path"]
     label_names = args["label_names"]
+    height = args["height"]
+    width = args["width"]
 
-    feats = get_features(backbone_dir, df_path, image_dir, label_col, feats_path, backbone_type=backbone_type)
+    feats, image_df = get_features(extractor_dir, df_path, image_dir, label_col, feats_path, extractor_type=extractor_type, height=height, width=width)
     plot_save_dir = os.path.dirname(feats_path)
-    do_tsne(label_col, df_path, feats, plot_save_dir, label_names)
+    do_tsne(label_col, image_df, feats, plot_save_dir, label_names)

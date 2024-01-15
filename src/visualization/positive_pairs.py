@@ -6,6 +6,8 @@ import numpy.typing as npt
 from torch.utils.data.dataloader import DataLoader
 from torch import Tensor
 
+from src.data.augmentation.pipelines import IMAGENET_MEAN, IMAGENET_STD
+
 def visualize_views(
         views: List[Tensor],
         labels: npt.NDArray = None,
@@ -14,8 +16,8 @@ def visualize_views(
         views_per_col: int = 8,
         fig_size: Tuple[int, int] = (24, 4),
         max_pixel_value: float = 255.0,
-        mean_pixel_value: Tuple[float, float, float] = (0., 0., 0.),
-        std_pixel_value: Tuple[float, float, float] = (1., 1., 1.),
+        mean_pixel_value: List[float] = IMAGENET_MEAN,
+        std_pixel_value: List[float] = IMAGENET_STD,
         sample_weight: bool = True
 ):
     '''Visualizes multiple positive pairs on same plot
@@ -89,8 +91,8 @@ def visualize_joint_views_dataset(
         views_per_col: int = 8,
         fig_size: Tuple[int, int] = (24, 4),
         max_pixel_value: float = 255.0,
-        mean_pixel_value: Tuple[float, float, float] = (0., 0., 0.),
-        std_pixel_value: Tuple[float, float, float] = (1., 1., 1.)
+        mean_pixel_value: Tuple[float, float, float] = IMAGENET_MEAN,
+        std_pixel_value: Tuple[float, float, float] = IMAGENET_STD
 ):
     '''Produces views for a dataset of positive pairs
 

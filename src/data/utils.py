@@ -9,13 +9,14 @@ import wandb
 import albumentations as A
 import cv2
 
-from src.data.datasets.ncus_dataset import NCUSDataset
+from src.data.datasets.ncus_dataset import NCUSBmodeDataset, NCUSMmodeDataset
 from src.data.datasets.image_datasets import *
 from src.data.augmentation.pipelines import *
 
 
 def get_augmentation_transforms_pretrain(
         pipeline: str,
+        us_mode: str,
         height: int,
         width: int,
         **augment_kwargs
@@ -23,22 +24,29 @@ def get_augmentation_transforms_pretrain(
     """Get augmentation transformation pipelines
 
     :param pipeline: Name of pipeline.
-                     One of {'byol', 'bmode_baseline', 'none'}
+                     One of {'byol', 'ncus', 'uscl', or 'none'}
+    :parm us_mode: Type of ultrasound exam ('bmode' or 'mmode')
     :param height: Image height
     :param width: Image width
     :param pipeline_kwargs: Pipeline keyword arguments
     :return: Augmentation pipelines for first and second images
     """
     pipeline = pipeline.lower()
+    augment_kwargs['resize_first'] = us_mode == 'mmode'
     if pipeline == "byol":
         return (
             get_byol_augmentations(height, width),
             get_byol_augmentations(height, width)
         )
-    elif pipeline == "bmode_baseline":
+    elif pipeline == "ncus":
         return (
-            get_bmode_baseline_augmentations(height, width),
-            get_bmode_baseline_augmentations(height, width)
+            get_ncus_augmentations(height, width, **augment_kwargs),
+            get_ncus_augmentations(height, width, **augment_kwargs)
+        )
+    elif pipeline == "uscl":
+        return (
+            get_uscl_augmentations(height, width),
+            get_uscl_augmentations(height, width)
         )
     else:
         if pipeline != "none":
@@ -49,34 +57,39 @@ def get_augmentation_transforms_pretrain(
             get_validation_scaling(height, width),
         )
 
-def prepare_bmode_pretrain_dataset(
+
+def prepare_pretrain_dataset(
         img_root: str,
         pretrain_method: str,
-        bmode_df: pd.DataFrame,
+        us_mode: str,
+        file_df: pd.DataFrame,
         batch_size: int,
         width: int,
         height: int,
-        augment_pipeline: str = "bmode_baseline",
+        augment_pipeline: str = "ncus",
         shuffle: bool = False,
         channels: int = 1,
         n_workers: int = 0,
         world_size: int = 1,
+        drop_last: bool = False,
         **preprocess_kwargs
 ) -> DataLoader:
     '''
-    Constructs a B-mode dataset for a joint embedding self-supervised pretraining task.
+    Constructs a US dataset for a joint embedding self-supervised pretraining task.
     :param img_root: Root directory in which all images are stored. Will be prepended to path in frames table.
     :param pretrain_method: Pretraining method
-    :param bmode_df: A table of B-mode properties. Each row corresponds to a B-mode clip.
+    :param us_mode: US Mode. Either 'bmode' or 'mmode'
+    :param file_df: A table of US video or image properties
     :param batch_size: Batch size for pretraining
-    :param width: Desired width of B-mode images
-    :param height: Desired height of B-mode images
-    :param augment: If True, applies data augmentation transforms to the inputs.
+    :param width: Desired width of US images
+    :param height: Desired height of US images
+    :param augment: If True, applies data augmentation transforms to the inputs
     :param shuffle: Flag indicating whether to shuffle the dataset
     :param channels: Number of channels
     :param max_time_delta: Maximum temporal separation of two frames
     :param n_workers: Number of workers for preloading batches
     :param world_size: Number of processes. If 1, then not using distributed mode
+    :param drop_last: If True, drops the last batch in the data loader if smaller than the batch size
     :param preprocess_kwargs: Keyword arguments for preprocessing
     :return: A batched dataset ready for iterating over preprocessed batches
     '''
@@ -85,24 +98,36 @@ def prepare_bmode_pretrain_dataset(
     pretrain_method = pretrain_method.lower()
     augment1, augment2 = get_augmentation_transforms_pretrain(
         augment_pipeline,
+        us_mode,
         height,
         width,
-        **preprocess_kwargs
+        **preprocess_kwargs["augmentation"]
     )
-    if pretrain_method in ["ncus_barlow_twins", "ncus_vicreg"]:
-        dataset = NCUSDataset(
-            bmode_df,
-            img_root,
-            channels,
-            preprocess_kwargs["max_time_delta"],
-            transforms1=augment1,
-            transforms2=augment2,
-            sample_weights=preprocess_kwargs["sample_weights"]
-        )
+    if pretrain_method in ["ncus_barlow_twins", "ncus_vicreg", "ncus_simclr"]:
+        if us_mode == 'mmode':
+            dataset = NCUSMmodeDataset(
+                file_df,
+                img_root,
+                channels,
+                preprocess_kwargs["max_x_delta"],
+                transforms1=augment1,
+                transforms2=augment2,
+                sample_weights=preprocess_kwargs["sample_weights"]
+            )
+        else:
+            dataset = NCUSBmodeDataset(
+                file_df,
+                img_root,
+                channels,
+                preprocess_kwargs["max_time_delta"],
+                transforms1=augment1,
+                transforms2=augment2,
+                sample_weights=preprocess_kwargs["sample_weights"]
+            )
     elif pretrain_method in ["simclr", "barlow_twins", "vicreg"]:
 
         dataset = ImagePretrainDataset(
-            bmode_df,
+            file_df,
             img_root,
             channels,
             transforms1=augment1,
@@ -122,7 +147,8 @@ def prepare_bmode_pretrain_dataset(
         batch_size=device_batch_size,
         shuffle=shuffle,
         num_workers=n_workers,
-        pin_memory=False,
+        pin_memory=True,
+        drop_last=drop_last,
         sampler=sampler
     )
     return data_loader
@@ -149,26 +175,41 @@ def get_video_dataset_from_frames(
         proportional to their length (in frames)
     :return: Video records DataFrame
     """
+    print(frames_df.head())
+    print(clips_df.head())
 
     agg_dict = {
         "filepath": "count",
-        "clip_dir": "first"
+        "id": "first",
     }
     for c in frames_df.columns:
         if "_label" in c:
             agg_dict.update({
                 c: "first"
             })
-    frames_df["clip_dir"] = frames_df["filepath"].apply(lambda path: "/".join(path.split("\\")[:-1]))
-    new_video_df = frames_df.groupby("id").agg(agg_dict).reset_index()
+
+    def get_clip_dir(path):
+        if "\\" in path:
+            return "/".join(path.split("\\")[:-1])
+        else:
+            return "/".join(path.split("/")[:-1])
+
+    frames_df["clip_dir"] = frames_df["filepath"].apply(lambda path: get_clip_dir(path))
+
+    # Take top 50% of brightest M-modes to maximize chances they intersect the pleural line
+    if 'brightness_rank' in frames_df.columns:
+        frames_df['img_idx'] = (frames_df['filepath'].str[-9:-4]).astype(int)
+        frames_df['mmode_count'] = frames_df.groupby('clip_dir')['clip_dir'].transform('count')
+        frames_df = frames_df.loc[frames_df['brightness_rank'] < frames_df['mmode_count'] // 2]
+        agg_dict.update({'img_idx': lambda x: list(x), 'mmode_count': 'first'})
+
+    new_video_df = frames_df.groupby("clip_dir").agg(agg_dict).reset_index()
     new_video_df.rename(columns={"filepath": "n_frames"}, inplace=True)
     new_video_df = new_video_df.merge(clips_df[["id"] + clip_columns], how="left", on="id")
-
     if rep_by_length:
         min_n_frames = new_video_df["n_frames"].min()
         copies = (new_video_df["n_frames"] / min_n_frames).astype(int).tolist()
         new_video_df = new_video_df.loc[new_video_df.index.repeat(copies)].reset_index(drop=True)
-
     return new_video_df
 
 
@@ -177,7 +218,7 @@ def load_data_for_pretrain(
         splits_dir: str,
         pretrain_method: str,
         batch_size: int,
-        augment_pipeline: str = "bmode_baseline",
+        augment_pipeline: str = "ncus",
         use_unlabelled: bool = True,
         channels: int = 1,
         width: int = 224,
@@ -203,14 +244,22 @@ def load_data_for_pretrain(
     :param max_pixel_val: Maximum value for pixel intensity
     :param width: Desired width of images
     :param height: Desired height of images
+    :param us_mode: US Mode. Either 'bmode' or 'mmode'.
     :param world_size: Number of processes. If 1, then not using distributed mode
     :param n_workers: Number of workers for preloading batches
     :param preprocess_kwargs: Keyword arguments for preprocessing
     :return: dataset for pretraining
     """
+    
+    if us_mode == 'bmode':
+        image_fn_suffix = 'frames'
+    elif us_mode == 'mmode':
+        image_fn_suffix = 'mmodes'
+    else:
+        raise Exception(f"Invalid US mode provided: {us_mode}")
 
     # Load data for pretraining
-    labelled_train_frames_path = os.path.join(splits_dir, 'train_set_frames.csv')
+    labelled_train_frames_path = os.path.join(splits_dir, f'train_set_{image_fn_suffix}.csv')
     labelled_train_clips_path = os.path.join(splits_dir, 'train_set_clips.csv')
     if os.path.exists(labelled_train_frames_path) and os.path.exists(labelled_train_clips_path):
         labelled_train_frames_df = pd.read_csv(labelled_train_frames_path)
@@ -218,7 +267,7 @@ def load_data_for_pretrain(
     else:
         labelled_train_frames_df = pd.DataFrame()
         labelled_train_clips_df = pd.DataFrame()
-    unlabelled_frames_path = os.path.join(splits_dir, 'unlabelled_frames.csv')
+    unlabelled_frames_path = os.path.join(splits_dir, f'unlabelled_{image_fn_suffix}.csv')
     unlabelled_clips_path = os.path.join(splits_dir, 'unlabelled_clips.csv')
     if os.path.exists(unlabelled_frames_path) and os.path.exists(unlabelled_clips_path):
         unlabelled_frames_df = pd.read_csv(unlabelled_frames_path)
@@ -226,7 +275,7 @@ def load_data_for_pretrain(
     else:
         unlabelled_frames_df = pd.DataFrame()
         unlabelled_clips_df = pd.DataFrame()
-    val_frames_path = os.path.join(splits_dir, 'val_set_frames.csv')
+    val_frames_path = os.path.join(splits_dir, f'val_set_{image_fn_suffix}.csv')
     val_clips_path = os.path.join(splits_dir, 'val_set_clips.csv')
     if os.path.exists(val_frames_path) and os.path.exists(val_clips_path):
         val_frames_df = pd.read_csv(val_frames_path)
@@ -253,40 +302,41 @@ def load_data_for_pretrain(
         else:
             val_df = None
 
-    if us_mode == 'bmode':
-        train_set = prepare_bmode_pretrain_dataset(
+    train_set = prepare_pretrain_dataset(
+        image_dir,
+        pretrain_method,
+        us_mode,
+        train_df,
+        batch_size,
+        width,
+        height,
+        augment_pipeline=augment_pipeline,
+        shuffle=True,
+        channels=channels,
+        world_size=world_size,
+        n_workers=n_workers,
+        drop_last=True,
+        **preprocess_kwargs
+    )
+    if val_frames_df.shape[0] > 0:
+        val_set = prepare_pretrain_dataset(
             image_dir,
             pretrain_method,
-            train_df,
+            us_mode,
+            val_df,
             batch_size,
             width,
             height,
-            augment_pipeline=augment_pipeline,
+            augment_pipeline="none",
             shuffle=True,
             channels=channels,
-            world_size=world_size,
+            distributed=False,
             n_workers=n_workers,
+            drop_last=False,
             **preprocess_kwargs
         )
-        if val_frames_df.shape[0] > 0:
-            val_set = prepare_bmode_pretrain_dataset(
-                image_dir,
-                pretrain_method,
-                val_df,
-                batch_size,
-                width,
-                height,
-                augment_pipeline="none",
-                shuffle=False,
-                channels=channels,
-                distributed=False,
-                n_workers=n_workers,
-                **preprocess_kwargs
-            )
-        else:
-            val_set = None
     else:
-        raise NotImplementedError("Currently, only B-mode datasets have been implemented")
+        val_set = None
 
     return train_set, train_df, val_set, val_df
 
@@ -303,7 +353,7 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
                              n_classes: int = 2,
                              n_workers: int = 0,
                              world_size: int = 1,
-                             **preprocess_kwargs
+                             **augment_kwargs
                              ):
     '''
     Constructs a dataset for a supervised learning task.
@@ -320,37 +370,34 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
     :param n_classes: Number of classes
     :param n_workers: Number of workers for loading images
     :param world_size: Number of processes. If 1, then not using distributed mode
-    :param preprocess_kwargs: Keyword arguments for the preprocessor initializer
+    :param augment_kwargs: Keyword arguments for augmentations
     :return: A batched dataset loader
     '''
-
     image_paths = image_df["filepath"].tolist()
     if label_col in image_df.columns:
         labels = image_df[label_col].to_numpy(dtype=np.int64)
     else:
         print(f"No label column named {label_col}. Setting labels to 0.")
         labels = np.zeros(image_df.shape[0], dtype=float)
-    if augment_pipeline == "supervised_bmode":
-        transforms = get_supervised_bmode_augmentions(height, width, **preprocess_kwargs)
-    elif augment_pipeline == "supervised_uscl":
-        transforms = get_uscl_supervised_augmentions(height, width, **preprocess_kwargs)
+    if augment_pipeline == "ncus":
+        transforms = get_ncus_augmentations(height, width, **augment_kwargs)
+    elif augment_pipeline == "supervised_ncus":
+        transforms = get_supervised_bmode_augmentions(height, width, **augment_kwargs)
+    elif augment_pipeline == "uscl":
+        transforms = get_uscl_augmentations(height, width, **augment_kwargs)
     else:
         if augment_pipeline != "none":
             logging.warning(f"Unrecognized augmentation pipeline: {augment_pipeline}.\n"
                             f"No augmentations will be applied.")
         transforms = get_validation_scaling(height, width)
-    if label_col == 'lung_sliding':
-        # TODO: Add M-mode preprocessor
-        raise NotImplementedError("M-mode data not supported yet.")
-    else:
-        dataset = ImageClassificationDataset(
-            img_root,
-            image_paths,
-            labels,
-            channels,
-            n_classes,
-            transforms=transforms
-        )
+    dataset = ImageClassificationDataset(
+        img_root,
+        image_paths,
+        labels,
+        channels,
+        n_classes,
+        transforms=transforms
+    )
     if world_size > 1:
         sampler = DistributedSampler(dataset, shuffle=shuffle)
         shuffle = None
@@ -370,6 +417,7 @@ def prepare_labelled_dataset(image_df: pd.DataFrame,
 
 def load_data_supervised(cfg: dict,
                          batch_size: int,
+                         us_mode: str,
                          label_col: str,
                          data_artifact_name: str,
                          splits_artifact_name: str,
@@ -379,7 +427,7 @@ def load_data_supervised(cfg: dict,
                          data_version: str = 'latest',
                          splits_version: str = 'latest',
                          redownload_data: bool = True,
-                         percent_train: int = 100,
+                         percent_train: float = 1.0,
                          height: int = 224,
                          width: int = 224,
                          channels: int = 1,
@@ -388,10 +436,12 @@ def load_data_supervised(cfg: dict,
                          n_workers: int = 0,
                          fold: Optional[int] = None,
                          k: Optional[int] = None,
+                         **augment_kwargs
     ) -> (DataLoader, DataLoader, DataLoader, pd.DataFrame, pd.DataFrame, pd.DataFrame):
     '''
     Retrieve data, data splits, and returns an iterable preprocessed dataset for supervised learning experiments
     :param cfg: The config.yaml file dictionary
+    :param us_mode: US mode ("bmode" or "mmode")
     :param image_dir: Images directory
     :param splits_dir: Directory containing CSVs for each data split
     :param batch_size: Batch size for datasets
@@ -414,6 +464,15 @@ def load_data_supervised(cfg: dict,
     :return: (training set, validation set, test set, training set table, validation set table, test set table, )
     '''
 
+    if us_mode == 'bmode':
+        image_fn_suffix = 'frames'
+        augment_kwargs['resize_first'] = False
+    elif us_mode == 'mmode':
+        image_fn_suffix = 'mmodes'
+        augment_kwargs['resize_first'] = True
+    else:
+        raise Exception(f"Invalid US mode provided: {us_mode}")
+
     # Retrieve versioned dataset artifact
     if run is not None and redownload_data:
         data = run.use_artifact(f"{data_artifact_name}:{data_version}")
@@ -425,29 +484,42 @@ def load_data_supervised(cfg: dict,
         splits_dir = splits_dir
 
     if fold is None:
-        train_frames_df = pd.read_csv(os.path.join(splits_dir, 'train_set_frames.csv'))
-        train_frames_df = train_frames_df.sample(frac=1.0, random_state=seed)
-        if percent_train < 1.0:
-            n_train_examples = int(percent_train * train_frames_df.shape[0])
-            train_frames_df = train_frames_df.iloc[:n_train_examples]
+        train_frames_df = pd.read_csv(os.path.join(splits_dir, f'train_set_{image_fn_suffix}.csv'))
 
-        val_frames_path = os.path.join(splits_dir, 'val_set_frames.csv')
+        val_frames_path = os.path.join(splits_dir, f'val_set_{image_fn_suffix}.csv')
         val_frames_df = pd.read_csv(val_frames_path) if os.path.exists(val_frames_path) else pd.DataFrame()
-        test_frames_path = os.path.join(splits_dir, 'test_set_frames.csv')
+        test_frames_path = os.path.join(splits_dir, f'test_set_{image_fn_suffix}.csv')
         test_frames_df = pd.read_csv(test_frames_path) if os.path.exists(test_frames_path) else pd.DataFrame()
 
         # Remove examples that do not have a label relevant for the current task
         train_frames_df = train_frames_df.loc[train_frames_df[label_col] != -1]
         val_frames_df = val_frames_df.loc[val_frames_df[label_col] != -1]
         test_frames_df = test_frames_df.loc[test_frames_df[label_col] != -1]
+
+        # If evaluating on fewer training examples, take percent_train * N random training examples.
+        if percent_train < 1.0:
+            n_train_examples = int(percent_train * train_frames_df.shape[0])
+            train_frames_df = train_frames_df.sample(frac=1.0).iloc[:n_train_examples]
     else:
-        test_frames_df = pd.read_csv(os.path.join(splits_dir, f'fold{fold}_frames.csv'))
+        test_frames_df = pd.read_csv(os.path.join(splits_dir, f'fold{fold}_{image_fn_suffix}.csv'))
         val_frames_df = test_frames_df
         train_frames_df = pd.DataFrame(columns=test_frames_df.columns)
         for i in range(1, k + 1):
             if i != fold:
-                fold_df = pd.read_csv(os.path.join(splits_dir, f'fold{i}_frames.csv'))
+                fold_df = pd.read_csv(os.path.join(splits_dir, f'fold{i}_{image_fn_suffix}.csv'))
                 train_frames_df = pd.concat([train_frames_df, fold_df], axis=0)
+
+    # For the lung sliding task, take only the brightest image from the original video
+    if label_col == 'lung_sliding_label':
+        train_frames_df['mmode_count'] = train_frames_df.groupby(['id', 'miniclip_num'])['miniclip_num'].transform('count')
+        val_frames_df['mmode_count'] = val_frames_df.groupby(['id', 'miniclip_num'])['miniclip_num'].transform('count')
+        test_frames_df['mmode_count'] = test_frames_df.groupby(['id', 'miniclip_num'])['miniclip_num'].transform('count')
+        train_frames_df = train_frames_df.loc[train_frames_df['brightness_rank'] < train_frames_df['mmode_count'] // 2]
+        val_frames_df = val_frames_df.loc[val_frames_df['brightness_rank'] < val_frames_df['mmode_count'] // 2]
+        test_frames_df = test_frames_df.loc[test_frames_df['brightness_rank'] < test_frames_df['mmode_count'] // 2]
+        # train_frames_df = train_frames_df.loc[train_frames_df['brightness_rank'] == 0]
+        # val_frames_df = val_frames_df.loc[val_frames_df['brightness_rank'] == 0]
+        # test_frames_df = test_frames_df.loc[test_frames_df['brightness_rank'] == 0]
 
     n_classes = train_frames_df[label_col].nunique()
     train_set = prepare_labelled_dataset(
@@ -461,7 +533,8 @@ def load_data_supervised(cfg: dict,
         shuffle=True,
         channels=channels,
         n_classes=n_classes,
-        n_workers=n_workers
+        n_workers=n_workers,
+        **augment_kwargs
     )
     val_set = prepare_labelled_dataset(
         val_frames_df,

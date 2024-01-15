@@ -105,14 +105,17 @@ def restore_extractor(
         for name, param in extractor.named_parameters():
             if any(name.startswith(prefix) for prefix in freeze_prefix):
                 param.requires_grad = False
-    pretrain_method = state_dict["pretrain_method"]
+    if "pretrain_method" in state_dict.keys():
+        pretrain_method = state_dict["pretrain_method"]
+    else:
+        pretrain_method = "unknown"
     return extractor, pretrain_method
 
 def normal_init_linear(
         in_dim: int,
         out_dim: int,
         w_mean: float = 0.,
-        w_std: float = 0.
+        w_std: float = 0.01
 ):
     """
     Initializes a fully connected layer with weights randomly
@@ -180,7 +183,10 @@ def get_classification_metrics(
     :return: Dictionary of class metrics
     """
     metrics = {}
-    metrics["auc"] = roc_auc_score(y_true, y_prob)
+    try:
+        metrics["auc"] = roc_auc_score(y_true, y_prob)
+    except ValueError:
+        metrics["auc"] = 0.
     if n_classes == 2:
         metrics["precision"] = precision_score(y_true, y_pred, zero_division=0.)
         metrics["recall"] = recall_score(y_true, y_pred, zero_division=0.)
