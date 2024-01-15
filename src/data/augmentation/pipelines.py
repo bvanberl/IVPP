@@ -221,7 +221,7 @@ def get_ncus_augmentations(
             v2.GaussianBlur(gauss_filter_width, (min_blur_sigma, max_blur_sigma))],
             p=blur_prob),
         v2.ToDtype(torch.float32, scale=True),
-        get_normalize_transform(mean_pixel_val, std_pixel_val)
+       get_normalize_transform(mean_pixel_val, std_pixel_val)
     ]
     if resize_first:
         transforms.insert(1, v2.Resize((height, width), antialias=True))

@@ -486,11 +486,6 @@ def load_data_supervised(cfg: dict,
     if fold is None:
         train_frames_df = pd.read_csv(os.path.join(splits_dir, f'train_set_{image_fn_suffix}.csv'))
 
-        # If evaluating on fewer training examples, take percent_train * N random training examples.
-        if percent_train < 1.0:
-            n_train_examples = int(percent_train * train_frames_df.shape[0])
-            train_frames_df = train_frames_df.sample(frac=1.0).iloc[:n_train_examples]
-
         val_frames_path = os.path.join(splits_dir, f'val_set_{image_fn_suffix}.csv')
         val_frames_df = pd.read_csv(val_frames_path) if os.path.exists(val_frames_path) else pd.DataFrame()
         test_frames_path = os.path.join(splits_dir, f'test_set_{image_fn_suffix}.csv')
@@ -500,6 +495,11 @@ def load_data_supervised(cfg: dict,
         train_frames_df = train_frames_df.loc[train_frames_df[label_col] != -1]
         val_frames_df = val_frames_df.loc[val_frames_df[label_col] != -1]
         test_frames_df = test_frames_df.loc[test_frames_df[label_col] != -1]
+
+        # If evaluating on fewer training examples, take percent_train * N random training examples.
+        if percent_train < 1.0:
+            n_train_examples = int(percent_train * train_frames_df.shape[0])
+            train_frames_df = train_frames_df.sample(frac=1.0).iloc[:n_train_examples]
     else:
         test_frames_df = pd.read_csv(os.path.join(splits_dir, f'fold{fold}_{image_fn_suffix}.csv'))
         val_frames_df = test_frames_df
