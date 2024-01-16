@@ -169,7 +169,7 @@ if __name__ == '__main__':
     elif method.lower() in ['barlow_twins', 'ncus_barlow_twins']:
         loss_fn = BarlowTwinsLoss(batch_size, lambda_=hparams["lambda_"], distributed=(world_size > 1)).cuda()
     elif method.lower() in ['vicreg', 'ncus_vicreg']:
-        loss_fn = VICRegGINILoss(batch_size, lambda_=hparams["lambda_"], mu=hparams["mu"], nu=hparams["nu"], distributed=(world_size > 1)).cuda()
+        loss_fn = VICRegLoss(batch_size, lambda_=hparams["lambda_"], mu=hparams["mu"], nu=hparams["nu"], distributed=(world_size > 1)).cuda()
     else:
         raise NotImplementedError(f'{method} is not currently supported.')
 

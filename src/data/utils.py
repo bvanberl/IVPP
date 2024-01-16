@@ -8,6 +8,7 @@ from torch.utils.data.distributed import DistributedSampler
 import wandb
 import albumentations as A
 import cv2
+from sklearn.model_selection import GroupKFold, StratifiedGroupKFold
 
 from src.data.datasets.ncus_dataset import NCUSBmodeDataset, NCUSMmodeDataset
 from src.data.datasets.image_datasets import *
@@ -564,3 +565,68 @@ def load_data_supervised(cfg: dict,
 
     return train_set, val_set, test_set, train_frames_df, val_frames_df, test_frames_df
 
+
+def label_efficiency_splits(
+        splits_dir: str,
+        us_mode: str,
+        label_col: str,
+        group_col: str = 'patient_id',
+        n_splits: int = 100,
+        stratify_by_label: bool = False,
+        seed: int = None
+) -> (List[pd.DataFrame], pd.DataFrame):
+    """Produces a series of training sets for repeated label efficiency experiments.
+
+    Splits the training data into n_splits subsets by group ID, ensuring no group
+    overlap between the splits. Returns test set for evaluation as well.
+    :param splits_dir: Directory containing CSVs for each data split
+    :param us_mode: US mode ("bmode" or "mmode")
+    :param label_col: Column name in US clips table corresponding to the label
+    :param group_col: Column name in US clips table containing group identifiers
+    :param n_splits: Number of times to split the training data
+    :param stratify_by_label: If True, attempts to preserve class ratio across splits
+    :param seed: If not None, ensures reproducible splits in the stratified case
+    :return: List of small training sets, test set
+    """
+
+    if us_mode == 'bmode':
+        image_fn_suffix = 'frames'
+    elif us_mode == 'mmode':
+        image_fn_suffix = 'mmodes'
+    else:
+        raise Exception(f"Invalid US mode provided: {us_mode}")
+
+    # Load training set clips and images, along with test set images
+    train_clips_df = pd.read_csv(os.path.join(splits_dir, 'train_set_clips.csv'))
+    train_clips_df = train_clips_df.loc[train_clips_df[label_col] != -1].reset_index()
+    train_frames_df = pd.read_csv(os.path.join(splits_dir, f'train_set_{image_fn_suffix}.csv'))
+    test_frames_df = pd.read_csv(os.path.join(splits_dir, f'val_set_{image_fn_suffix}.csv'))
+    train_frames_df = train_frames_df.loc[train_frames_df[label_col] != -1].reset_index()
+    test_frames_df = test_frames_df.loc[test_frames_df[label_col] != -1].reset_index()
+
+    # Take top 50% brightest M-modes, ordered by brightness
+    if us_mode == 'mmode':
+        train_frames_df['mmode_count'] = train_frames_df.groupby(['id', 'miniclip_num'])['miniclip_num'].transform('count')
+        test_frames_df['mmode_count'] = test_frames_df.groupby(['id', 'miniclip_num'])['miniclip_num'].transform('count')
+        train_frames_df = train_frames_df.loc[train_frames_df['brightness_rank'] < train_frames_df['mmode_count'] // 2]
+        test_frames_df = test_frames_df.loc[test_frames_df['brightness_rank'] < test_frames_df['mmode_count'] // 2]
+
+    # Define the splitter
+    train_sets = []
+    if stratify_by_label:
+        group_kfold = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+    else:
+        group_kfold = GroupKFold(n_splits=n_splits)
+    groups = train_clips_df[group_col]
+
+    # Split by group into n_splits divisions
+    split_indices = group_kfold.split(train_clips_df, train_clips_df[label_col], groups=groups)
+    for i, (_, fold_index) in enumerate(split_indices):
+
+        # Create a training set from all images in the current group division
+        train_clips = train_clips_df.loc[fold_index]
+        train_set = train_frames_df.loc[train_frames_df['id'].isin(train_clips['id'].tolist())]
+        if train_set[label_col].nunique() > 1:
+            train_sets.append(train_set)
+
+    return train_sets, test_frames_df

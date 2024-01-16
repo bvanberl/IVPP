@@ -9,7 +9,7 @@ data:
   min_pixel_value: 0.0
   max_pixel_value: 255.0
   num_channels: 3
-  us_mode: 'mmode'
+  us_mode: 'bmode'
 
 pretrain:
   seed: 11
@@ -64,7 +64,7 @@ train:
   extractor_weights: 'final_model.pth' #'imagenet'
   batch_size: 384
   n_cutoff_layers: 0
-  epochs: 100
+  epochs: 10
   lr_extractor: 0.00001
   lr_head: 0.0001
   momentum: 0.9
@@ -74,10 +74,13 @@ train:
   optimizer: "adam"
   augment_pipeline: "ncus"
   use_class_weights: false
+  label_eff:
+    n_splits: 20
+    n_trials: 3
 
 augment:
   ncus:
-    min_crop_area: 0.4
+    min_crop_area: 0.95
     max_crop_area: 1.0
     min_crop_ratio: 0.4
     max_crop_ratio: 0.6
@@ -85,7 +88,7 @@ augment:
     max_brightness: 0.25
     contrast_prob: 0.5
     max_contrast: 0.25
-    blur_prob: 0.25
+    blur_prob: 0
     min_blur_sigma: 0.1
     max_blur_sigma: 2.0
   uscl:

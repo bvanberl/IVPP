@@ -1,5 +1,6 @@
 import argparse
 import datetime
+import os
 from typing import Union
 
 import json
@@ -14,7 +15,7 @@ import torchsummary
 import torchvision
 torchvision.disable_beta_transforms_warning()
 
-from src.data.utils import load_data_supervised
+from src.data.utils import load_data_supervised, label_efficiency_splits, prepare_labelled_dataset
 from src.experiments.utils import *
 from src.models.extractors import get_extractor
 
@@ -81,7 +82,8 @@ def evaluate_on_dataset(
         scalars.update(
             get_classification_metrics(n_classes, all_y_prob, all_y_pred, all_y_true)
         )
-        log_scalars(split, scalars, log_step, writer, use_wandb)
+        if writer:
+            log_scalars(split, scalars, log_step, writer, use_wandb)
     classifier.to(current_device)
     return scalars
 
@@ -95,8 +97,8 @@ def train_classifier(
         n_classes: int,
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler.LRScheduler,
-        checkpoint_path: str,
-        writer: SummaryWriter,
+        checkpoint_path: Optional[str],
+        writer: Optional[SummaryWriter],
         test_eval: bool = False,
         class_thresh: float = 0.5,
         metric_of_interest: str = "loss",
@@ -158,7 +160,8 @@ def train_classifier(
                     y_true.cpu().detach().numpy()
                 )
                 scalars.update(train_metrics)
-                log_scalars("train", scalars, global_step, writer, use_wandb)
+                if writer:
+                    log_scalars("train", scalars, global_step, writer, use_wandb)
                 print(f"Step {epoch_step + 1}/{batches_per_epoch}: " +
                       ", ".join([f"{m}: {scalars[m]:.4f}" for m in scalars]))
 
@@ -196,7 +199,8 @@ def train_classifier(
 
     # Evaluate checkpoint with lowest validation loss on the test set
     if test_eval:
-        classifier.load_state_dict(torch.load(checkpoint_path))
+        if checkpoint_path:
+            classifier.load_state_dict(torch.load(checkpoint_path))
         test_metrics = evaluate_on_dataset(
             test_ds,
             "test",
@@ -569,6 +573,141 @@ def kfold_cross_validation(run_cfg):
         json.dump(test_metrics, f)
 
 
+def label_efficiency_repeated_experiment(run_cfg):
+
+    label_col = run_cfg['label']
+    n_trials = run_cfg['label_eff']['n_trials']
+    train_dfs, test_df = label_efficiency_splits(
+        run_cfg['splits_dir'],
+        run_cfg['us_mode'],
+        run_cfg['label'],
+        'patient_id',
+        run_cfg['label_eff']['n_splits'],
+        True,
+        run_cfg['seed']
+    )
+
+    n_classes = test_df[label_col].nunique()
+    augment_pipeline = run_cfg['augment_pipeline']
+    if augment_pipeline in ['ncus', 'uscl']:
+        augment_kwargs = {k.lower(): v for k, v in cfg['augment'][augment_pipeline].items()}
+    else:
+        augment_kwargs = {}
+
+    test_set = prepare_labelled_dataset(
+        test_df,
+        run_cfg['image_dir'],
+        run_cfg['height'],
+        run_cfg['width'],
+        run_cfg['batch_size'],
+        label_col,
+        augment_pipeline="none",
+        shuffle=False,
+        channels=run_cfg['num_channels'],
+        n_classes=n_classes,
+        n_workers=run_cfg["num_workers"]
+    )
+
+    extractor_weights = run_cfg['extractor_weights']
+    extractor_type = run_cfg['extractor_type']
+    n_cutoff_layers = run_cfg['n_cutoff_layers']
+    freeze_prefix = run_cfg['freeze_prefix']
+    channels = run_cfg['num_channels']
+    height = run_cfg['height']
+    width = run_cfg['width']
+    augment_pipeline = run_cfg['augment_pipeline']
+    if augment_pipeline in ['ncus', 'uscl']:
+        augment_kwargs = {k.lower(): v for k, v in cfg['augment'][augment_pipeline].items()}
+    else:
+        augment_kwargs = {}
+    img_dim = (channels, height, width)
+    all_metrics = {}
+
+    for i in range(n_trials):
+        print(f"Trial {i + 1} / {n_trials}:")
+
+        train_set = prepare_labelled_dataset(
+            train_dfs[i],
+            run_cfg['image_dir'],
+            run_cfg['height'],
+            run_cfg['width'],
+            run_cfg['batch_size'],
+            label_col,
+            augment_pipeline=augment_pipeline,
+            shuffle=True,
+            channels=run_cfg['num_channels'],
+            n_classes=n_classes,
+            n_workers=run_cfg["num_workers"],
+            **augment_kwargs
+        )
+
+        # Prepare model, optionally with a pretrained extractor
+        extractor = get_extractor(
+            extractor_type,
+            extractor_weights == 'imagenet',
+            n_cutoff_layers
+        )
+        if extractor_weights in ['scratch', 'imagenet']:
+            pretrain_method = "fully_supervised"
+        else:
+            extractor, pretrain_method = restore_extractor(
+                extractor,
+                extractor_weights,
+                use_wandb,
+                None,
+                freeze_prefix
+            )
+        h_dim = extractor(torch.randn((1,) + img_dim)).shape[-1]
+        head = get_classifier_head(h_dim, [], n_classes)
+        classifier = Sequential(extractor, head).cuda()
+
+        # Define an optimizer that assigns different learning rates to the
+        # extractor and head.
+        epochs = run_cfg['epochs']
+        lr_extractor = run_cfg['lr_extractor']
+        lr_head = run_cfg['lr_head']
+        weight_decay = run_cfg['weight_decay']
+        momentum = run_cfg['momentum']
+        use_class_weights = bool(run_cfg['use_class_weights'])
+        param_groups = [dict(params=head.parameters(), lr=lr_head)]
+        if experiment_type == "fine-tune":
+            param_groups.append(dict(params=extractor.parameters(), lr=lr_extractor))
+        if run_cfg['optimizer'] == "adam":
+            optimizer = Adam(param_groups, 0, weight_decay=weight_decay)
+        elif run_cfg['optimizer'] == "sgd":
+            optimizer = SGD(param_groups, 0, weight_decay=weight_decay, momentum=momentum)
+        else:
+            raise ValueError(f"{run_cfg['optimizer']} is an unsupported optimizer.")
+        scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=0, last_epoch=-1, verbose=True)
+
+        test_metrics = train_classifier(
+            classifier,
+            train_set,
+            None,
+            test_set,
+            epochs,
+            n_classes,
+            optimizer,
+            scheduler,
+            None,
+            None,
+            True,
+            metric_of_interest="loss",
+            use_class_weights=use_class_weights
+        )
+        print(i, test_metrics) #TAKE OUT
+
+        if i == 0:
+            all_metrics = {m: [test_metrics[m]] for m in test_metrics}
+        else:
+            all_metrics = {m: all_metrics[m] + [test_metrics[m]] for m in test_metrics}
+
+    print(all_metrics)
+    if run_cfg['label_eff_path']:
+        with open(run_cfg['label_eff_path'], 'w') as file:
+            json.dump(all_metrics, file, indent=4)
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
@@ -608,6 +747,7 @@ if __name__ == '__main__':
     parser.add_argument('--extractor_type', required=False, type=str, help='Architecture of feature extractor')
     parser.add_argument('--freeze_prefix', nargs='*', required=False, help='Prefixes for layers we wish to freeze')
     parser.add_argument('--use_class_weights', type=int, required=False, default=None, help='If 0, no class weights. If 1, class weights.')
+    parser.add_argument('--label_eff_path', required=False, type=str, help='JSON file path at which to write results of label efficiency experiment')
     args = vars(parser.parse_args())
 
     torch.manual_seed(cfg['train']['seed'])
@@ -651,6 +791,8 @@ if __name__ == '__main__':
         single_train(run_cfg)
     elif args['train'] == 'cross_validation':
         kfold_cross_validation(run_cfg)
+    elif args['train'] == 'label_efficiency':
+        label_efficiency_repeated_experiment(run_cfg)
     else:
         raise NotImplementedError(f"No training run type named {args['train']}")
 
