@@ -1,2 +1,2 @@
-# NCUS
-Non-Contrastive Ultrasound Self-supervision
+# IVPP
+**I**ntra-**V**ideo **P**ositive **P**airs for Self-Supervised Learning
